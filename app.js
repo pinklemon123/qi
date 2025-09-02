@@ -90,6 +90,20 @@ function render() {
       cell.dataset.row = r;
       cell.dataset.col = c;
 
+      // coordinate labels
+      if (c === 0) {
+        const lbl = document.createElement('div');
+        lbl.className = 'row-label';
+        lbl.textContent = 10 - r;
+        cell.appendChild(lbl);
+      }
+      if (r === 9) {
+        const lbl = document.createElement('div');
+        lbl.className = 'col-label';
+        lbl.textContent = String.fromCharCode(65 + c);
+        cell.appendChild(lbl);
+      }
+
       const p = board[r][c];
       if (p) {
         const el = document.createElement('div');
