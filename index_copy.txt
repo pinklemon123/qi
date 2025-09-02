@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>中国象棋</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <h1>中国象棋</h1>
+      <div class="top-bar">
+        <div id="status">准备开�?/div>
+        <div class="controls">
+          <label style="margin-right:10px; display:inline-flex; align-items:center; gap:6px;">
+            <input type="checkbox" id="aiToggle" /> 黑方AI
+          </label>
+          <button id="resetBtn">重新开�?/button>
+        </div>
+      </div>
+
+      <div id="board" aria-label="中国象棋棋盘" role="grid"></div>
+
+      <div class="legend">
+        <div><span class="piece red">�?/span> 红方先行</div>
+        <div>点击棋子查看可走位置，点目标落子</div>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+  </html>
+
