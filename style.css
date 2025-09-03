@@ -37,11 +37,12 @@ button:hover { background:#fafafa; }
   margin-left: 1.2em;
   margin-bottom: 1.2em;
   overflow: visible;
-  touch-action: none;
+
 }
 
 .cell {
   position: absolute;
+n
 }
 
 .row-label,
@@ -59,13 +60,14 @@ button:hover { background:#fafafa; }
 }
 
 
+
 .col-label {
   bottom: -1.2em;
   left: 0;
   transform: translateX(-50%);
 }
 
-/* River decoration comes from background image */
+
 
 /* Piece styling */
 .piece {

@@ -20,10 +20,7 @@ const aiToggle = document.getElementById('aiToggle');
 const aiLevelSelect = document.getElementById('aiLevel');
 
 // layout constants based on board.png (percentages of container size)
-const BOARD_OFF_X = 5.08;      // left/right margin
-const BOARD_OFF_TOP = 5.08;    // top margin
-const BOARD_STEP_X = 11.23;    // horizontal distance between files
-const BOARD_STEP_Y = 9.982;    // vertical distance between ranks
+
 
 resetBtn.addEventListener('click', () => init());
 aiToggle?.addEventListener('change', () => {
@@ -87,6 +84,7 @@ function createInitialBoard() {
 
 function render() {
   boardEl.innerHTML = '';
+
   for (let r = 0; r < 10; r++) {
     for (let c = 0; c < 9; c++) {
       const cell = document.createElement('div');
@@ -94,6 +92,7 @@ function render() {
       cell.setAttribute('role', 'gridcell');
       cell.dataset.row = r;
       cell.dataset.col = c;
+
 
       const left = BOARD_OFF_X + BOARD_STEP_X * c;
       const top = BOARD_OFF_TOP + BOARD_STEP_Y * r;
@@ -115,6 +114,7 @@ function render() {
         lbl.textContent = String.fromCharCode(65 + c);
         cell.appendChild(lbl);
       }
+
 
       const p = board[r][c];
       if (p) {
@@ -649,6 +649,7 @@ function hasAnyLegalMove(b, side) {
   }
   return false;
 }
+
 
 // ===== AI helpers (difficulty) =====
 function chooseAIMoveByLevel(b, side, level) {
