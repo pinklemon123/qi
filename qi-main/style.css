@@ -8,6 +8,9 @@
   --highlight: #ffef9f;
   --move: #d4f4dd;
   --capture: #ffd6d6;
+  /* Adjust these to align overlay grid with your board.png margins (percent of full width/height) */
+  --board-off-x: 0;   /* left/right margin in % */
+  --board-off-top: 0; /* top/bottom margin in % */
 }
 
 * { box-sizing: border-box; }
@@ -30,31 +33,14 @@ button { padding: 6px 12px; border-radius: 6px; border: 1px solid #bbb; backgrou
 button:hover { background:#fafafa; }
 
 #board {
-  /* Pure CSS grid background to ensure perfect alignment */
-  background-image:
-    repeating-linear-gradient(
-      to right,
-      transparent 0,
-      transparent calc(100% / 8 - 1px),
-      var(--line) calc(100% / 8 - 1px),
-      var(--line) calc(100% / 8)
-    ),
-    repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent calc(100% / 9 - 1px),
-      var(--line) calc(100% / 9 - 1px),
-      var(--line) calc(100% / 9)
-    );
-  background-color: var(--cell);
-  aspect-ratio: 8 / 9; /* 9 files (8 gaps) : 10 ranks (9 gaps) */
+  /* Use your custom board image */
+  background: url('board.png') center/100% 100% no-repeat;
+  aspect-ratio: 1 / 1;
   width: 100%;
   position: relative;
   margin-left: 1.2em;
   margin-bottom: 1.2em;
   overflow: visible;
-  border: 2px solid var(--line);
-  border-radius: 6px;
 }
 
 .cell {

@@ -18,11 +18,12 @@ const resetBtn = document.getElementById('resetBtn');
 const aiToggle = document.getElementById('aiToggle');
 const aiLevelSelect = document.getElementById('aiLevel');
 
-// Overlay grid aligned directly to container (no external image offsets)
-const BOARD_OFF_X = 0;      // left/right margin (% of width)
-const BOARD_OFF_TOP = 0;    // top/bottom margin (% of height)
-const BOARD_STEP_X = 100 / 8; // 9 files -> 8 intervals
-const BOARD_STEP_Y = 100 / 9; // 10 ranks -> 9 intervals
+// Read grid offsets from CSS variables to align with board.png
+const cssVars = getComputedStyle(document.documentElement);
+const BOARD_OFF_X = parseFloat(cssVars.getPropertyValue('--board-off-x')) || 0;   // % of width
+const BOARD_OFF_TOP = parseFloat(cssVars.getPropertyValue('--board-off-top')) || 0; // % of height
+const BOARD_STEP_X = (100 - 2 * BOARD_OFF_X) / 8; // 9 files -> 8 intervals
+const BOARD_STEP_Y = (100 - 2 * BOARD_OFF_TOP) / 9; // 10 ranks -> 9 intervals
 
 resetBtn.addEventListener('click', () => init());
 aiToggle?.addEventListener('change', () => {
