@@ -18,12 +18,11 @@ const resetBtn = document.getElementById('resetBtn');
 const aiToggle = document.getElementById('aiToggle');
 const aiLevelSelect = document.getElementById('aiLevel');
 
-// layout constants based on board.png (percentages of container size)
-// Use margins and derive steps so intersections align exactly across the board.
-const BOARD_OFF_X = 6.445;      // left/right margin (% of width)
-const BOARD_OFF_TOP = 4.004;    // top/bottom margin (% of height)
-const BOARD_STEP_X = (100 - 2 * BOARD_OFF_X) / 8; // 9 files -> 8 intervals
-const BOARD_STEP_Y = (100 - 2 * BOARD_OFF_TOP) / 9; // 10 ranks -> 9 intervals
+// Overlay grid aligned directly to container (no external image offsets)
+const BOARD_OFF_X = 0;      // left/right margin (% of width)
+const BOARD_OFF_TOP = 0;    // top/bottom margin (% of height)
+const BOARD_STEP_X = 100 / 8; // 9 files -> 8 intervals
+const BOARD_STEP_Y = 100 / 9; // 10 ranks -> 9 intervals
 
 resetBtn.addEventListener('click', () => init());
 aiToggle?.addEventListener('change', () => {
@@ -118,9 +117,6 @@ function render() {
         cell.appendChild(lbl);
       }
 
-
-
-      
       // coordinate labels
       if (c === 0) {
         const lbl = document.createElement('div');
@@ -139,7 +135,7 @@ function render() {
       if (p) {
         const el = document.createElement('div');
         el.className = `piece ${p.color === COLORS.RED ? 'red' : 'black'} ${selected && selected.row === r && selected.col === c ? 'focus' : ''}`;
-        el.textContent = getPieceChar(p);
+        el.textContent = getPieceCharFixed(p);
         el.draggable = false;
         cell.appendChild(el);
       }
@@ -733,6 +729,21 @@ function negamax(b, side, depth, alpha, beta) {
     if (alpha >= beta) break;
   }
   return best;
+}
+
+// Override piece text rendering with correct Chinese characters
+function getPieceCharFixed(p) {
+  const red = p.color === COLORS.RED;
+  switch (p.type) {
+    case TYPES.R: return red ? '车' : '車';
+    case TYPES.N: return red ? '马' : '馬';
+    case TYPES.B: return red ? '相' : '象';
+    case TYPES.A: return red ? '仕' : '士';
+    case TYPES.K: return red ? '帅' : '將';
+    case TYPES.C: return red ? '炮' : '砲';
+    case TYPES.P: return red ? '兵' : '卒';
+    default: return '?';
+  }
 }
 
 // Bootstrap
