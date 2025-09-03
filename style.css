@@ -30,45 +30,52 @@ button { padding: 6px 12px; border-radius: 6px; border: 1px solid #bbb; backgrou
 button:hover { background:#fafafa; }
 
 #board {
-  background: var(--cell);
-  border: 3px solid var(--line);
-  border-radius: 8px;
-  aspect-ratio: 9 / 10;
+  background: url('board.png') center/100% 100% no-repeat;
+  aspect-ratio: 1 / 1;
   width: 100%;
-  display: grid;
-  grid-template-columns: repeat(9, 1fr);
-  grid-template-rows: repeat(10, 1fr);
   position: relative;
+  margin-left: 1.2em;
+  margin-bottom: 1.2em;
+  overflow: visible;
+  touch-action: none;
 }
 
-/* SVG overlay for authentic Xiangqi board lines */
-.board-overlay {
-  position: absolute;
-  /* Match the content box (inside the #board border: 3px) */
-  inset: 3px;
-  width: auto;
-  height: auto;
-  pointer-events: none;
-  z-index: 1;
-}
-
-/* Ensure lines render crisply and keep stroke width during scaling */
-.board-overlay line,
-.board-overlay path {
-  vector-effect: non-scaling-stroke;
-  shape-rendering: crispEdges;
-}
-
-/* Grid lines */
 .cell {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: absolute;
 }
 
-/* River decoration */
-/* River now drawn in SVG overlay */
+/* board coordinate labels */
+.row-labels,
+.col-labels {
+  position: absolute;
+  font-size: 0.6em;
+  color: #777;
+  pointer-events: none;
+}
+
+.row-labels {
+  top: 0;
+  bottom: 0;
+  left: -1.2em;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.col-labels {
+  left: 0;
+  right: 0;
+  bottom: -1.2em;
+  display: flex;
+  justify-content: space-between;
+}
+
+.row-labels div,
+.col-labels div {
+  line-height: 1;
+}
+
+/* River decoration comes from background image */
 
 /* Piece styling */
 .piece {
@@ -82,16 +89,36 @@ button:hover { background:#fafafa; }
   font-weight: 700;
   user-select: none;
   box-shadow: 0 2px 0 rgba(0,0,0,.06);
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translate(-50%, -50%);
   z-index: 2; /* above board lines */
+  cursor: pointer;
 }
 .piece.red { color: var(--red); border-color: #dba49b; }
 .piece.black { color: var(--black); border-color: #8b9db2; }
 .piece.focus { outline: 3px solid #88e; }
 
 /* Move highlights */
-.hint { position:absolute; inset: 0; display:flex; align-items:center; justify-content:center; pointer-events:none; z-index: 2; }
-.dot { width: 28%; aspect-ratio:1/1; border-radius:50%; background: var(--move); border: 1px solid #8ad39b; opacity:.95; }
+.hint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+.dot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 28%;
+  aspect-ratio:1/1;
+  border-radius:50%;
+  background: var(--move);
+  border: 1px solid #8ad39b;
+  opacity:.95;
+  transform: translate(-50%, -50%);
+}
 .dot.capture { background: var(--capture); border-color: #e47b7b; }
 
 .legend { margin-top: 10px; color: #666; display:flex; gap: 14px; align-items:center; }

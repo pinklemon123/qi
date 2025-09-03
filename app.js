@@ -11,12 +11,19 @@ let legalTargets = []; // [{row, col}]
 let blackAI = false; // whether black is AI-controlled
 let aiThinking = false;
 let aiLevel = 'medium'; // easy | medium | hard
+let dragFrom = null; // starting cell for drag move
 
 const boardEl = document.getElementById('board');
 const statusEl = document.getElementById('status');
 const resetBtn = document.getElementById('resetBtn');
 const aiToggle = document.getElementById('aiToggle');
 const aiLevelSelect = document.getElementById('aiLevel');
+
+// layout constants based on board.png (percentages of container size)
+const BOARD_OFF_X = 5.08;      // left/right margin
+const BOARD_OFF_TOP = 5.08;    // top margin
+const BOARD_STEP_X = 11.23;    // horizontal distance between files
+const BOARD_STEP_Y = 9.982;    // vertical distance between ranks
 
 resetBtn.addEventListener('click', () => init());
 aiToggle?.addEventListener('change', () => {
@@ -80,8 +87,6 @@ function createInitialBoard() {
 
 function render() {
   boardEl.innerHTML = '';
-  drawBoardOverlaySvg(boardEl);
-
   for (let r = 0; r < 10; r++) {
     for (let c = 0; c < 9; c++) {
       const cell = document.createElement('div');
@@ -89,6 +94,13 @@ function render() {
       cell.setAttribute('role', 'gridcell');
       cell.dataset.row = r;
       cell.dataset.col = c;
+
+      const left = BOARD_OFF_X + BOARD_STEP_X * c;
+      const top = BOARD_OFF_TOP + BOARD_STEP_Y * r;
+      cell.style.left = left + '%';
+      cell.style.top = top + '%';
+      cell.style.width = BOARD_STEP_X + '%';
+      cell.style.height = BOARD_STEP_Y + '%';
 
       const p = board[r][c];
       if (p) {
@@ -110,10 +122,30 @@ function render() {
         cell.appendChild(hint);
       }
 
-      cell.addEventListener('click', onCellClick);
+      cell.addEventListener('pointerdown', onCellPointerDown);
+      cell.addEventListener('pointerup', onCellPointerUp);
       boardEl.appendChild(cell);
     }
   }
+
+  // coordinate labels
+  const rowLabels = document.createElement('div');
+  rowLabels.className = 'row-labels';
+  for (let r = 0; r < 10; r++) {
+    const lbl = document.createElement('div');
+    lbl.textContent = 10 - r;
+    rowLabels.appendChild(lbl);
+  }
+  boardEl.appendChild(rowLabels);
+
+  const colLabels = document.createElement('div');
+  colLabels.className = 'col-labels';
+  for (let c = 0; c < 9; c++) {
+    const lbl = document.createElement('div');
+    lbl.textContent = String.fromCharCode(65 + c);
+    colLabels.appendChild(lbl);
+  }
+  boardEl.appendChild(colLabels);
 }
 
 function updateStatus(extra) {
@@ -130,29 +162,48 @@ function updateStatus(extra) {
 }
 
 function onCellClick(e) {
-  if (aiThinking) return; // disable interactions while AI thinks
+  if (aiThinking) return;
   const r = Number(e.currentTarget.dataset.row);
   const c = Number(e.currentTarget.dataset.col);
   const p = board[r][c];
 
-  // If a legal move target was clicked
   if (selected && legalTargets.some(t => t.row === r && t.col === c)) {
     makeAndApplyMove(selected, { row: r, col: c });
     return;
   }
 
-  // Select own piece
   if (p && p.color === current) {
     selected = { row: r, col: c };
     legalTargets = legalMovesAt(board, r, c, current);
-    render();
-    return;
+  } else {
+    selected = null;
+    legalTargets = [];
   }
-
-  // Clicked elsewhere - clear selection
-  selected = null;
-  legalTargets = [];
   render();
+}
+
+function onCellPointerDown(e) {
+  if (aiThinking) return;
+  dragFrom = { row: Number(e.currentTarget.dataset.row), col: Number(e.currentTarget.dataset.col) };
+}
+
+function onCellPointerUp(e) {
+  if (aiThinking) return;
+  const toR = Number(e.currentTarget.dataset.row);
+  const toC = Number(e.currentTarget.dataset.col);
+  if (dragFrom && (dragFrom.row !== toR || dragFrom.col !== toC)) {
+    const p = board[dragFrom.row][dragFrom.col];
+    if (p && p.color === current) {
+      const moves = legalMovesAt(board, dragFrom.row, dragFrom.col, current);
+      if (moves.some(m => m.row === toR && m.col === toC)) {
+        makeAndApplyMove({ row: dragFrom.row, col: dragFrom.col }, { row: toR, col: toC });
+        dragFrom = null;
+        return;
+      }
+    }
+  }
+  dragFrom = null;
+  onCellClick(e);
 }
 
 function makeAndApplyMove(from, to) {
@@ -602,102 +653,6 @@ function hasAnyLegalMove(b, side) {
     }
   }
   return false;
-}
-
-// ===== Board overlay (SVG) =====
-function drawBoardOverlaySvg(container) {
-  const svgNS = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(svgNS, 'svg');
-  svg.setAttribute('class', 'board-overlay');
-  // Match the logical grid: 9 columns (x: 0..8), 10 rows (y: 0..9)
-  // Using a 9x10 viewBox makes integer coordinates align with cell centers.
-  svg.setAttribute('viewBox', '0 0 9 10');
-  svg.setAttribute('preserveAspectRatio', 'none');
-
-  const stroke = '#8b6f47';
-  const stroke2 = '#8b6f47';
-  const accent = '#c89b3c';
-  // Use pixel-like widths to keep lines visible with non-scaling-stroke
-  const GRID_W = 1.2;      // inner grid lines (screen px)
-  const BORDER_W = 2.4;    // outer border (unused if CSS border is present)
-
-  const line = (x1, y1, x2, y2, w = GRID_W) => {
-    const el = document.createElementNS(svgNS, 'line');
-    el.setAttribute('x1', x1);
-    el.setAttribute('y1', y1);
-    el.setAttribute('x2', x2);
-    el.setAttribute('y2', y2);
-    el.setAttribute('stroke', stroke);
-    el.setAttribute('stroke-width', w);
-    el.setAttribute('vector-effect', 'non-scaling-stroke');
-    svg.appendChild(el);
-  };
-
-  // Outer border is provided by CSS (#board { border }) so we skip drawing it here
-
-  // Horizontal inner lines (between top and bottom borders): y = 1..9
-  for (let y = 1; y <= 9; y++) {
-    line(0, y, 9, y);
-  }
-
-  // Vertical lines, with river gap between y=4 and y=5
-  for (let x = 0; x <= 9; x++) {
-    // top half
-    line(x, 0, x, 4);
-    // bottom half
-    line(x, 5, x, 10);
-  }
-
-  // Palace diagonals
-  line(3, 0, 5, 2);
-  line(5, 0, 3, 2);
-  line(3, 7, 5, 9);
-  line(5, 7, 3, 9);
-
-  // River label
-  const text = document.createElementNS(svgNS, 'text');
-  text.setAttribute('x', 1.6);
-  text.setAttribute('y', 4.6);
-  text.setAttribute('fill', accent);
-  text.setAttribute('font-size', '0.6');
-  text.setAttribute('font-weight', '700');
-  text.textContent = '楚河';
-  svg.appendChild(text);
-  const text2 = document.createElementNS(svgNS, 'text');
-  text2.setAttribute('x', 5.4);
-  text2.setAttribute('y', 4.6);
-  text2.setAttribute('fill', accent);
-  text2.setAttribute('font-size', '0.6');
-  text2.setAttribute('font-weight', '700');
-  text2.textContent = '汉界';
-  svg.appendChild(text2);
-
-  // Star points (cannons and soldiers) as small corner crosses
-  const drawCross = (cx, cy) => {
-    const size = 0.18;
-    const thickness = 1; // thicker for visibility
-    const mk = (x1, y1, x2, y2) => {
-      const c = document.createElementNS(svgNS, 'line');
-      c.setAttribute('x1', x1);
-      c.setAttribute('y1', y1);
-      c.setAttribute('x2', x2);
-      c.setAttribute('y2', y2);
-      c.setAttribute('stroke', stroke2);
-      c.setAttribute('stroke-width', thickness);
-      c.setAttribute('vector-effect', 'non-scaling-stroke');
-      svg.appendChild(c);
-    };
-    mk(cx - size, cy - size, cx - size / 3, cy - size / 3);
-    mk(cx + size, cy - size, cx + size / 3, cy - size / 3);
-    mk(cx - size, cy + size, cx - size / 3, cy + size / 3);
-    mk(cx + size, cy + size, cx + size / 3, cy + size / 3);
-  };
-  const cannonXs = [1, 7];
-  cannonXs.forEach(x => { drawCross(x, 2); drawCross(x, 7); });
-  const soldierXs = [0, 2, 4, 6, 8];
-  soldierXs.forEach(x => { drawCross(x, 3); drawCross(x, 6); });
-
-  container.appendChild(svg);
 }
 
 // ===== AI helpers (difficulty) =====
