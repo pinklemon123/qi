@@ -11,6 +11,7 @@ let legalTargets = []; // [{row, col}]
 let blackAI = false; // whether black is AI-controlled
 let aiThinking = false;
 let aiLevel = 'medium'; // easy | medium | hard
+let dragFrom = null; // starting cell for drag move
 
 const boardEl = document.getElementById('board');
 const statusEl = document.getElementById('status');
@@ -135,7 +136,8 @@ function render() {
         cell.appendChild(hint);
       }
 
-      cell.addEventListener('click', onCellClick);
+      cell.addEventListener('pointerdown', onCellPointerDown);
+      cell.addEventListener('pointerup', onCellPointerUp);
       boardEl.appendChild(cell);
     }
   }
@@ -155,29 +157,48 @@ function updateStatus(extra) {
 }
 
 function onCellClick(e) {
-  if (aiThinking) return; // disable interactions while AI thinks
+  if (aiThinking) return;
   const r = Number(e.currentTarget.dataset.row);
   const c = Number(e.currentTarget.dataset.col);
   const p = board[r][c];
 
-  // If a legal move target was clicked
   if (selected && legalTargets.some(t => t.row === r && t.col === c)) {
     makeAndApplyMove(selected, { row: r, col: c });
     return;
   }
 
-  // Select own piece
   if (p && p.color === current) {
     selected = { row: r, col: c };
     legalTargets = legalMovesAt(board, r, c, current);
-    render();
-    return;
+  } else {
+    selected = null;
+    legalTargets = [];
   }
-
-  // Clicked elsewhere - clear selection
-  selected = null;
-  legalTargets = [];
   render();
+}
+
+function onCellPointerDown(e) {
+  if (aiThinking) return;
+  dragFrom = { row: Number(e.currentTarget.dataset.row), col: Number(e.currentTarget.dataset.col) };
+}
+
+function onCellPointerUp(e) {
+  if (aiThinking) return;
+  const toR = Number(e.currentTarget.dataset.row);
+  const toC = Number(e.currentTarget.dataset.col);
+  if (dragFrom && (dragFrom.row !== toR || dragFrom.col !== toC)) {
+    const p = board[dragFrom.row][dragFrom.col];
+    if (p && p.color === current) {
+      const moves = legalMovesAt(board, dragFrom.row, dragFrom.col, current);
+      if (moves.some(m => m.row === toR && m.col === toC)) {
+        makeAndApplyMove({ row: dragFrom.row, col: dragFrom.col }, { row: toR, col: toC });
+        dragFrom = null;
+        return;
+      }
+    }
+  }
+  dragFrom = null;
+  onCellClick(e);
 }
 
 function makeAndApplyMove(from, to) {

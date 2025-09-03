@@ -37,6 +37,7 @@ button:hover { background:#fafafa; }
   margin-left: 1.2em;
   margin-bottom: 1.2em;
   overflow: visible;
+  touch-action: none;
 }
 
 .cell {
@@ -83,6 +84,7 @@ button:hover { background:#fafafa; }
   left: 0;
   transform: translate(-50%, -50%);
   z-index: 2; /* above board lines */
+  cursor: pointer;
 }
 .piece.red { color: var(--red); border-color: #dba49b; }
 .piece.black { color: var(--black); border-color: #8b9db2; }
