@@ -11,7 +11,6 @@ let legalTargets = []; // [{row, col}]
 let blackAI = false; // whether black is AI-controlled
 let aiThinking = false;
 let aiLevel = 'medium'; // easy | medium | hard
-let dragFrom = null; // starting cell for drag move
 
 const boardEl = document.getElementById('board');
 const statusEl = document.getElementById('status');
@@ -20,7 +19,10 @@ const aiToggle = document.getElementById('aiToggle');
 const aiLevelSelect = document.getElementById('aiLevel');
 
 // layout constants based on board.png (percentages of container size)
-
+const BOARD_OFF_X = 6.445;      // left/right margin
+const BOARD_OFF_TOP = 4.004;    // top margin
+const BOARD_STEP_X = 10.889;    // horizontal distance between files
+const BOARD_STEP_Y = 10.200;    // vertical distance between ranks
 
 resetBtn.addEventListener('click', () => init());
 aiToggle?.addEventListener('change', () => {
@@ -116,6 +118,22 @@ function render() {
       }
 
 
+
+      
+      // coordinate labels
+      if (c === 0) {
+        const lbl = document.createElement('div');
+        lbl.className = 'row-label';
+        lbl.textContent = 10 - r;
+        cell.appendChild(lbl);
+      }
+      if (r === 9) {
+        const lbl = document.createElement('div');
+        lbl.className = 'col-label';
+        lbl.textContent = String.fromCharCode(65 + c);
+        cell.appendChild(lbl);
+      }
+
       const p = board[r][c];
       if (p) {
         const el = document.createElement('div');
@@ -136,8 +154,7 @@ function render() {
         cell.appendChild(hint);
       }
 
-      cell.addEventListener('pointerdown', onCellPointerDown);
-      cell.addEventListener('pointerup', onCellPointerUp);
+      cell.addEventListener('click', onCellClick);
       boardEl.appendChild(cell);
     }
   }
@@ -157,48 +174,29 @@ function updateStatus(extra) {
 }
 
 function onCellClick(e) {
-  if (aiThinking) return;
+  if (aiThinking) return; // disable interactions while AI thinks
   const r = Number(e.currentTarget.dataset.row);
   const c = Number(e.currentTarget.dataset.col);
   const p = board[r][c];
 
+  // If a legal move target was clicked
   if (selected && legalTargets.some(t => t.row === r && t.col === c)) {
     makeAndApplyMove(selected, { row: r, col: c });
     return;
   }
 
+  // Select own piece
   if (p && p.color === current) {
     selected = { row: r, col: c };
     legalTargets = legalMovesAt(board, r, c, current);
-  } else {
-    selected = null;
-    legalTargets = [];
+    render();
+    return;
   }
+
+  // Clicked elsewhere - clear selection
+  selected = null;
+  legalTargets = [];
   render();
-}
-
-function onCellPointerDown(e) {
-  if (aiThinking) return;
-  dragFrom = { row: Number(e.currentTarget.dataset.row), col: Number(e.currentTarget.dataset.col) };
-}
-
-function onCellPointerUp(e) {
-  if (aiThinking) return;
-  const toR = Number(e.currentTarget.dataset.row);
-  const toC = Number(e.currentTarget.dataset.col);
-  if (dragFrom && (dragFrom.row !== toR || dragFrom.col !== toC)) {
-    const p = board[dragFrom.row][dragFrom.col];
-    if (p && p.color === current) {
-      const moves = legalMovesAt(board, dragFrom.row, dragFrom.col, current);
-      if (moves.some(m => m.row === toR && m.col === toC)) {
-        makeAndApplyMove({ row: dragFrom.row, col: dragFrom.col }, { row: toR, col: toC });
-        dragFrom = null;
-        return;
-      }
-    }
-  }
-  dragFrom = null;
-  onCellClick(e);
 }
 
 function makeAndApplyMove(from, to) {
@@ -649,6 +647,7 @@ function hasAnyLegalMove(b, side) {
   }
   return false;
 }
+
 
 
 // ===== AI helpers (difficulty) =====
