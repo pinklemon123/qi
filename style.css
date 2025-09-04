@@ -2,17 +2,15 @@
    全局变量（可按需微调）
    ========================= */
 :root{
-  /* 取 vmin 和 vw 中更大的那个，再上限到 1400px */
-  --board-max-width: min( max(100vmin, 100vw), 1400px );
-
-
+  /* 棋盘整体尺寸：适中 */
+  --board-max-width: min(95vmin, 960px);
 
   /* 与当前 board.png 对齐的偏移（百分比） */
-  --board-off-x: 4%;
+  --board-off-x: 3.5%;
   --board-off-top: 6.0%;
 
-  /* 棋子在单格中占比（0.74~0.80 都可） */
-  --piece-scale: 0.78;
+  /* 棋子在单格中占比（0.74~0.80 都OK） */
+  --piece-scale: 0.76;
 
   /* 提示/高亮 */
   --hint-dot: 18px;
@@ -42,9 +40,7 @@ body{
   justify-content:center;
   padding:24px 16px 40px;
 }
-/* 让外层不再卡 1200px */
-.app{ width:100%; max-width:1400px; }  /* 想更大就改 1600/1800 */
-
+.app{ width:100%; max-width:1000px }  /* 外层不要太宽 */
 h1{margin:.2em 0 .6em}
 
 /* =========================
@@ -136,6 +132,26 @@ h1{margin:.2em 0 .6em}
   box-shadow:0 0 10px rgba(0,152,255,.25);
 }
 .cell.last{ background:var(--last-move); border-radius:12%; }
+
+/* =========================
+   工具栏
+   ========================= */
+.toolbar{
+  display:flex; flex-wrap:wrap; gap:10px 12px;
+  align-items:center; justify-content:center;
+  margin: 6px 0 10px;
+}
+.toolbar label{ display:flex; align-items:center; gap:6px; }
+button{
+  appearance:none; border:none; border-radius:12px;
+  padding:8px 14px; background:#f0eee9; color:#333;
+  cursor:pointer; font-weight:600;
+  box-shadow:0 1px 0 rgba(0,0,0,.04);
+}
+button:hover{ background:#e8e5de }
+button:active{ transform:translateY(1px) }
+button.primary{ background:#2b7cff; color:#fff }
+button.danger{ background:#e74c3c; color:#fff }
 
 /* =========================
    彻底禁用文字棋子/坐标字母（防止旧代码残留）

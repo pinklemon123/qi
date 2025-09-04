@@ -286,15 +286,27 @@ function isAIMoveValid(mv){
   const moves = legalMovesAt(board, mv.from.row, mv.from.col, COLORS.BLACK);
   return moves.some(m => m.row===mv.to.row && m.col===mv.to.col);
 }
-async function requestAIMove(){
-  // 注意：Vercel 的函数路径是 /api/ai/move
-  const payload = { board: serializeBoardForAI(board), side:'b', difficulty:aiLevel };
-  const res = await fetch('/api/ai/move', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
-  if (!res.ok) throw new Error(`AI HTTP ${res.status}`);
-  const data = await res.json();
-  const pick = (o) => o && Array.isArray(o.from) && Array.isArray(o.to) ? { from:{row:o.from[0], col:o.from[1]}, to:{row:o.to[0], col:o.to[1]} } : null;
-  return pick(data) || pick(data?.move) || null;
+function requestAIMove(){
+  const legalMoves = collectAllLegalMoves(board, current).map(m => ({
+    from: [m.from.row, m.from.col],
+    to:   [m.to.row,   m.to.col]
+  }));
+  const payload = {
+    board: serializeBoardForAI(board),
+    side: current===COLORS.RED ? 'r' : 'b',
+    difficulty: aiLevel,
+    legalMoves
+  };
+  return fetch('/api/ai/move', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  }).then(r => r.json()).then(o => ({
+    from:{row:o.from[0], col:o.from[1]},
+    to:{row:o.to[0], col:o.to[1]}
+  }));
 }
+
 function serializeBoardForAI(b){
   // 与你原先格式一致：10x9，Red 大写，Black 小写，. 为空
   const map = p => {
