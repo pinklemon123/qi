@@ -2,15 +2,15 @@
    全局变量（可按需微调）
    ========================= */
 :root{
-  /* 棋盘整体大小：随短边缩放，最大 960px */
-  --board-max-width: min(95vmin, 960px);
+  /* 棋盘整体大小：更大，随短边缩放 */
+  --board-max-width: min(98vmin, 1100px);
 
-  /* 底图到第一条格线的相对偏移（百分比），这组与当前 board.png 对齐 */
-  --board-off-x: 3.5%;
-  --board-off-top: 6.0%;
+  /* 与当前 board.png 对齐的偏移（百分比） */
+  --board-off-x: 3.4%;
+  --board-off-top: 5.8%;
 
   /* 棋子在单格中占比（0.74~0.80 都可） */
-  --piece-scale: 0.76;
+  --piece-scale: 0.78;
 
   /* 提示/高亮 */
   --hint-dot: 18px;
@@ -40,7 +40,7 @@ body{
   justify-content:center;
   padding:24px 16px 40px;
 }
-.app{width:100%; max-width:860px}
+.app{ width:100%; max-width:1200px }  /* 保持更大的容器 */
 h1{margin:.2em 0 .6em}
 
 /* =========================
@@ -55,7 +55,7 @@ h1{margin:.2em 0 .6em}
   overflow:visible;
   -webkit-tap-highlight-color: transparent;
 
-  /* 暴露给 JS 的变量（JS 读取后计算步长） */
+  /* 提供给 JS 读取用的偏移（来源于 :root） */
   --off-x: var(--board-off-x);
   --off-top: var(--board-off-top);
 }
@@ -132,25 +132,6 @@ h1{margin:.2em 0 .6em}
   box-shadow:0 0 10px rgba(0,152,255,.25);
 }
 .cell.last{ background:var(--last-move); border-radius:12%; }
-
-/* =========================
-   工具栏（可选）
-   ========================= */
-.toolbar{
-  display:flex; flex-wrap:wrap; gap:8px;
-  align-items:center; justify-content:center;
-  margin: 6px 0 10px;
-}
-button{
-  appearance:none; border:none; border-radius:12px;
-  padding:8px 14px; background:#f0eee9; color:#333;
-  cursor:pointer; font-weight:600;
-  box-shadow:0 1px 0 rgba(0,0,0,.04);
-}
-button:hover{ background:#e8e5de }
-button:active{ transform:translateY(1px) }
-button.primary{ background:#2b7cff; color:#fff }
-button.danger{ background:#e74c3c; color:#fff }
 
 /* =========================
    彻底禁用文字棋子/坐标字母（防止旧代码残留）
