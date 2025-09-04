@@ -299,7 +299,6 @@ function negamax(b, side, depth, alpha, beta) {
   if (!moves.length) return mate.stalemate ? 0 : -999999 + (2-depth);
   for (const mv of moves) {
     const nb=deepCopyBoard(b);
-    nb[mv.to.row][mv.from.col] = undefined; // 防御性：不会用到
     nb[mv.to.row][mv.to.col] = nb[mv.from.row][mv.from.col];
     nb[mv.from.row][mv.from.col] = null;
     const val=-negamax(nb, other(side), depth-1, -beta, -alpha);
@@ -310,17 +309,4 @@ function negamax(b, side, depth, alpha, beta) {
   return best;
 }
 
-// 文本棋子（作为回退/调试用）
-export function getPieceChar(p){
-  const red = p.color===COLORS.RED;
-  switch(p.type){
-    case TYPES.R: return red?'车':'車';
-    case TYPES.N: return red?'马':'馬';
-    case TYPES.B: return red?'相':'象';
-    case TYPES.A: return red?'仕':'士';
-    case TYPES.K: return red?'帅':'將';
-    case TYPES.C: return red?'炮':'砲';
-    case TYPES.P: return red?'兵':'卒';
-    default: return '?';
-  }
-}
+

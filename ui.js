@@ -92,8 +92,9 @@ function render(){
       cell.style.width  = BOARD_STEP_X + '%';
       cell.style.height = BOARD_STEP_Y + '%';
 
-      const p = board[r][c];
+       const p = board[r][c];
       if (p) {
+        // 只渲染图片，不再回退到文字，避免出现“帅/將”
         const src = imgSrcOf(p);
         if (src) {
           const img = document.createElement('img');
@@ -103,12 +104,8 @@ function render(){
           img.draggable = false;
           cell.appendChild(img);
         } else {
-          // 回退成文字棋子（不建议，但可用于缺图调试）
-          const el = document.createElement('div');
-          el.className = `piece ${p.color===COLORS.RED ? 'red':'black'}`;
-          el.textContent = pieceText(p);
-          el.draggable = false;
-          cell.appendChild(el);
+          // 没有对应图片就不渲染（可在控制台提示）
+          console.warn('Missing piece image for', codeOf(p));
         }
         if (selected && selected.row===r && selected.col===c){
           const ring = document.createElement('div');
@@ -131,20 +128,6 @@ function render(){
   }
 }
 
-function pieceText(p){
-  // 与 logic.js 的 getPieceChar 等价，但为了避免循环依赖，简写一份
-  const red = p.color===COLORS.RED;
-  switch(p.type){
-    case TYPES.R: return red?'车':'車';
-    case TYPES.N: return red?'马':'馬';
-    case TYPES.B: return red?'相':'象';
-    case TYPES.A: return red?'仕':'士';
-    case TYPES.K: return red?'帅':'將';
-    case TYPES.C: return red?'炮':'砲';
-    case TYPES.P: return red?'兵':'卒';
-    default: return '?';
-  }
-}
 
 // === 交互 ===
 function onBoardClick(e){
@@ -178,8 +161,8 @@ function animateMove(from, to, piece, done){
   if (!fromCell || !toCell) return done();
 
   animating = true;
-  const fromEl = fromCell.querySelector('.piece-img, .piece');
-  const toEl   = toCell.querySelector('.piece-img, .piece');
+const fromEl = fromCell.querySelector('.piece-img');
+const toEl   = toCell.querySelector('.piece-img');
   if (fromEl) fromEl.style.visibility = 'hidden';
   if (toEl)   toEl.style.visibility   = 'hidden';
 
@@ -187,8 +170,16 @@ function animateMove(from, to, piece, done){
   const a = fromCell.getBoundingClientRect();
   const b = toCell.getBoundingClientRect();
 
-  // 用图片或文字，克隆一个飞过去
-  const clone = fromEl?.cloneNode(true) || document.createElement('div');
+  // 必须克隆图片；若没有 fromEl，则用映射补建一张 <img>
+  let clone = fromEl?.cloneNode(true);
+  if (!clone) {
+    const i = document.createElement('img');
+    i.className = 'piece-img';
+    i.src = imgSrcOf(piece) || '';
+    i.alt = codeOf(piece);
+    clone = i;
+  }
+
   clone.style.position = 'absolute';
   clone.style.left   = (a.left - boardRect.left + a.width/2) + 'px';
   clone.style.top    = (a.top  - boardRect.top  + a.height/2) + 'px';
