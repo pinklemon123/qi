@@ -11,12 +11,14 @@ let legalTargets = []; // [{row, col}]
 let blackAI = false; // whether black is AI-controlled
 let aiThinking = false;
 let aiLevel = 'medium'; // easy | medium | hard
-
+let animating = false; // prevent interaction during animation
+let history = []; // stack of past states
 const boardEl = document.getElementById('board');
 const statusEl = document.getElementById('status');
 const resetBtn = document.getElementById('resetBtn');
 const aiToggle = document.getElementById('aiToggle');
 const aiLevelSelect = document.getElementById('aiLevel');
+const undoBtn = document.getElementById('undoBtn');
 
 // Read grid offsets from CSS variables to align with board.png
 const cssVars = getComputedStyle(document.documentElement);
@@ -25,7 +27,9 @@ const BOARD_OFF_TOP = parseFloat(cssVars.getPropertyValue('--board-off-top')) ||
 const BOARD_STEP_X = (100 - 2 * BOARD_OFF_X) / 8; // 9 files -> 8 intervals
 const BOARD_STEP_Y = (100 - 2 * BOARD_OFF_TOP) / 9; // 10 ranks -> 9 intervals
 
+boardEl.addEventListener('click', onBoardClick);
 resetBtn.addEventListener('click', () => init());
+undoBtn?.addEventListener('click', undoMove);
 aiToggle?.addEventListener('change', () => {
   blackAI = !!aiToggle.checked;
   updateStatus();
@@ -45,9 +49,9 @@ function init() {
   aiThinking = false;
   if (aiToggle) aiToggle.checked = blackAI;
   if (aiLevelSelect) aiLevelSelect.value = aiLevel;
+  history = [{ board: deepCopyBoard(board), current }];
   render();
   updateStatus();
-}
 
 function createInitialBoard() {
   const b = Array.from({ length: 10 }, () => Array(9).fill(null));
@@ -152,7 +156,7 @@ function render() {
         cell.appendChild(hint);
       }
 
-      cell.addEventListener('click', onCellClick);
+
       boardEl.appendChild(cell);
     }
   }
@@ -171,19 +175,23 @@ function updateStatus(extra) {
   statusEl.textContent = text;
 }
 
-function onCellClick(e) {
-  if (aiThinking) return; // disable interactions while AI thinks
-  const r = Number(e.currentTarget.dataset.row);
-  const c = Number(e.currentTarget.dataset.col);
+function onBoardClick(e) {
+  if (aiThinking || animating) return;
+  const rect = boardEl.getBoundingClientRect();
+  const xPct = ((e.clientX - rect.left) / rect.width) * 100;
+  const yPct = ((e.clientY - rect.top) / rect.height) * 100;
+  const c = Math.round((xPct - BOARD_OFF_X) / BOARD_STEP_X);
+  const r = Math.round((yPct - BOARD_OFF_TOP) / BOARD_STEP_Y);
+  if (r < 0 || r > 9 || c < 0 || c > 8) return;
   const p = board[r][c];
 
-  // If a legal move target was clicked
+
   if (selected && legalTargets.some(t => t.row === r && t.col === c)) {
     makeAndApplyMove(selected, { row: r, col: c });
     return;
   }
 
-  // Select own piece
+
   if (p && p.color === current) {
     selected = { row: r, col: c };
     legalTargets = legalMovesAt(board, r, c, current);
@@ -191,55 +199,63 @@ function onCellClick(e) {
     return;
   }
 
-  // Clicked elsewhere - clear selection
+
   selected = null;
   legalTargets = [];
   render();
 }
 
-function animateMove(from, to) {
-  return new Promise(resolve => {
-    const pieceEl = document.querySelector(`.cell.row-${from.row}.col-${from.col} .piece`);
-    const targetCell = document.querySelector(`.cell.row-${to.row}.col-${to.col}`);
-    if (!pieceEl || !targetCell) {
-      resolve();
-      return;
-    }
-    const boardRect = boardEl.getBoundingClientRect();
-    const startRect = pieceEl.getBoundingClientRect();
-    const endRect = targetCell.getBoundingClientRect();
-    const anim = pieceEl.cloneNode(true);
-    anim.style.position = 'absolute';
-    anim.style.left = startRect.left - boardRect.left + 'px';
-    anim.style.top = startRect.top - boardRect.top + 'px';
-    anim.style.transition = 'left 0.2s ease, top 0.2s ease';
-    pieceEl.style.visibility = 'hidden';
-    const targetPiece = targetCell.querySelector('.piece');
-    if (targetPiece) targetPiece.style.visibility = 'hidden';
-    boardEl.appendChild(anim);
-    requestAnimationFrame(() => {
-      anim.style.left = endRect.left - boardRect.left + 'px';
-      anim.style.top = endRect.top - boardRect.top + 'px';
-    });
-    anim.addEventListener('transitionend', () => {
-      boardEl.removeChild(anim);
-      resolve();
-    }, { once: true });
+function animateMove(from, to, piece, done) {
+  const fromCell = document.querySelector(`.cell.row-${from.row}.col-${from.col}`);
+  const toCell = document.querySelector(`.cell.row-${to.row}.col-${to.col}`);
+  if (!fromCell || !toCell) {
+    done();
+    return;
+  }
+  animating = true;
+  const fromPieceEl = fromCell.querySelector('.piece');
+  const toPieceEl = toCell.querySelector('.piece');
+  if (fromPieceEl) fromPieceEl.style.visibility = 'hidden';
+  if (toPieceEl) toPieceEl.style.visibility = 'hidden';
+
+  const boardRect = boardEl.getBoundingClientRect();
+  const fromRect = fromCell.getBoundingClientRect();
+  const toRect = toCell.getBoundingClientRect();
+  const clone = document.createElement('div');
+  clone.className = `piece ${piece.color === COLORS.RED ? 'red' : 'black'}`;
+  clone.textContent = getPieceCharFixed(piece);
+  clone.style.position = 'absolute';
+  clone.style.left = (fromRect.left - boardRect.left + fromRect.width / 2) + 'px';
+  clone.style.top = (fromRect.top - boardRect.top + fromRect.height / 2) + 'px';
+  clone.style.transform = 'translate(-50%, -50%)';
+  clone.style.transition = 'left 0.25s ease, top 0.25s ease';
+  boardEl.appendChild(clone);
+
+  requestAnimationFrame(() => {
+    clone.style.left = (toRect.left - boardRect.left + toRect.width / 2) + 'px';
+    clone.style.top = (toRect.top - boardRect.top + toRect.height / 2) + 'px';
   });
+
+  clone.addEventListener('transitionend', () => {
+    boardEl.removeChild(clone);
+    animating = false;
+    done();
+  }, { once: true });
 }
 
-async function makeAndApplyMove(from, to) {
-  const moves = legalMovesAt(board, from.row, from.col, current);
-  if (!moves.some(m => m.row === to.row && m.col === to.col)) return; // guard
-  // Clear selection
+
+function undoMove() {
+  if (aiThinking || animating) return;
+  if (history.length <= 1) return;
+  history.pop();
+  const prev = history[history.length - 1];
+  board = deepCopyBoard(prev.board);
+  current = prev.current;
   selected = null;
   legalTargets = [];
-  await animateMove(from, to);
-
-  // Apply move (mutate)
-  board[to.row][to.col] = board[from.row][from.col];
-  board[from.row][from.col] = null;
-
+  render();
+  updateStatus();
+}
 
 
   // Check end conditions for opponent
@@ -260,8 +276,25 @@ async function makeAndApplyMove(from, to) {
   current = next;
   render();
   updateStatus();
+  history.push({ board: deepCopyBoard(board), current });
   maybeTriggerAI();
 }
+
+function makeAndApplyMove(from, to) {
+  const moves = legalMovesAt(board, from.row, from.col, current);
+  if (!moves.some(m => m.row === to.row && m.col === to.col)) return; // guard
+
+  // Apply move (mutate)
+  board[to.row][to.col] = board[from.row][from.col];
+  board[from.row][from.col] = null;
+
+  // Clear selection
+  selected = null;
+  legalTargets = [];
+
+  animateMove(from, to, board[to.row][to.col], postMove);
+}
+
 
 function other(color) { return color === COLORS.RED ? COLORS.BLACK : COLORS.RED; }
 
@@ -344,22 +377,7 @@ async function applyMoveDirect(from, to) {
     await animateMove(from, to);
   board[to.row][to.col] = board[from.row][from.col];
   board[from.row][from.col] = null;
-  const next = other(current);
-  const mateInfo = checkMateStatus(board, next);
-  if (mateInfo.mate) {
-    render();
-    statusEl.textContent = `${current === COLORS.RED ? '红方' : '黑方'}胜！(将死)`;
-    return;
-  }
-  if (mateInfo.stalemate) {
-    render();
-    statusEl.textContent = '和棋 (无子可动)';
-    return;
-  }
-  current = next;
-  render();
-  updateStatus();
-  maybeTriggerAI();
+  animateMove(from, to, board[to.row][to.col], postMove);
 }
 
 async function requestAIMove() {
