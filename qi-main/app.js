@@ -197,17 +197,50 @@ function onCellClick(e) {
   render();
 }
 
-function makeAndApplyMove(from, to) {
+function animateMove(from, to) {
+  return new Promise(resolve => {
+    const pieceEl = document.querySelector(`.cell.row-${from.row}.col-${from.col} .piece`);
+    const targetCell = document.querySelector(`.cell.row-${to.row}.col-${to.col}`);
+    if (!pieceEl || !targetCell) {
+      resolve();
+      return;
+    }
+    const boardRect = boardEl.getBoundingClientRect();
+    const startRect = pieceEl.getBoundingClientRect();
+    const endRect = targetCell.getBoundingClientRect();
+    const anim = pieceEl.cloneNode(true);
+    anim.style.position = 'absolute';
+    anim.style.left = startRect.left - boardRect.left + 'px';
+    anim.style.top = startRect.top - boardRect.top + 'px';
+    anim.style.transition = 'left 0.2s ease, top 0.2s ease';
+    pieceEl.style.visibility = 'hidden';
+    const targetPiece = targetCell.querySelector('.piece');
+    if (targetPiece) targetPiece.style.visibility = 'hidden';
+    boardEl.appendChild(anim);
+    requestAnimationFrame(() => {
+      anim.style.left = endRect.left - boardRect.left + 'px';
+      anim.style.top = endRect.top - boardRect.top + 'px';
+    });
+    anim.addEventListener('transitionend', () => {
+      boardEl.removeChild(anim);
+      resolve();
+    }, { once: true });
+  });
+}
+
+async function makeAndApplyMove(from, to) {
   const moves = legalMovesAt(board, from.row, from.col, current);
   if (!moves.some(m => m.row === to.row && m.col === to.col)) return; // guard
+  // Clear selection
+  selected = null;
+  legalTargets = [];
+  await animateMove(from, to);
 
   // Apply move (mutate)
   board[to.row][to.col] = board[from.row][from.col];
   board[from.row][from.col] = null;
 
-  // Clear selection
-  selected = null;
-  legalTargets = [];
+
 
   // Check end conditions for opponent
   const next = other(current);
@@ -277,15 +310,15 @@ async function maybeTriggerAI() {
   try {
     const move = await requestAIMove();
     if (move && isValidAIMove(move)) {
-      applyMoveDirect(move.from, move.to);
+      await applyMoveDirect(move.from, move.to);
     } else {
       const fallback = chooseAIMoveByLevel(board, COLORS.BLACK, aiLevel) || chooseHeuristicMove(board, COLORS.BLACK);
-      if (fallback) applyMoveDirect(fallback.from, fallback.to);
+      if (fallback) await applyMoveDirect(fallback.from, fallback.to);
     }
   } catch (e) {
     console.error('AI move error:', e);
     const fallback = chooseAIMoveByLevel(board, COLORS.BLACK, aiLevel) || chooseHeuristicMove(board, COLORS.BLACK);
-    if (fallback) applyMoveDirect(fallback.from, fallback.to);
+     if (fallback) await applyMoveDirect(fallback.from, fallback.to);
   } finally {
     aiThinking = false;
     updateStatus();
@@ -302,14 +335,15 @@ function isValidAIMove(move) {
   return moves.some(m => m.row === to.row && m.col === to.col);
 }
 
-function applyMoveDirect(from, to) {
+async function applyMoveDirect(from, to) {
   // Apply and handle end/turn similar to makeAndApplyMove
   const moves = legalMovesAt(board, from.row, from.col, current);
   if (!moves.some(m => m.row === to.row && m.col === to.col)) return;
-  board[to.row][to.col] = board[from.row][from.col];
-  board[from.row][from.col] = null;
   selected = null;
   legalTargets = [];
+    await animateMove(from, to);
+  board[to.row][to.col] = board[from.row][from.col];
+  board[from.row][from.col] = null;
   const next = other(current);
   const mateInfo = checkMateStatus(board, next);
   if (mateInfo.mate) {
