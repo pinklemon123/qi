@@ -1,3 +1,11 @@
-# Ignore accidental Windows device filename
-nul
+local.config.js
+.env
 
+
+
+node_modules
+
+
+# ignore Windows device file
+
+nul
