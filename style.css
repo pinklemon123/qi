@@ -54,9 +54,11 @@ body{
 
 /* 为了 JS 更好算位移，暴露给 JS 的两个变量（JS 可用 getComputedStyle 读取） */
 #board{
-  --off-x: var(--board-off-x);
-  --off-top: var(--board-off-top);
+  --off-x: 3.5%;
+  --off-top: 6%;
+  /* 如果你做了 --board-img-size / --board-img-top-offset，也可以一起调 */
 }
+
 
 /* ====== 单元格（交叉点） ====== */
 /* .cell 会由 JS 放 9x10 个，left/top 由 JS 用百分比定位到交叉点 */
