@@ -1,11 +1,9 @@
 {
-  "version": 2,
-  "redirects": [
-    { "source": "/", "destination": "/mode.html", "permanent": false }
-  ],
+  "cleanUrls": true,
   "rewrites": [
-    { "source": "/ai/move", "destination": "/api/ai/move" }
+    { "source": "/", "destination": "/index.html" }
   ]
 }
+
 
 
