@@ -1,21 +1,20 @@
-/* ====== 全局与布局 ====== */
+/* =========================
+   全局变量（可按需微调）
+   ========================= */
 :root{
-  /* 棋盘最大宽度（按需改） */
---board-max-width: min(98vw, 860px);
+  /* 棋盘整体大小：随短边缩放，最大 960px */
+  --board-max-width: min(95vmin, 960px);
 
-  /* 棋盘内部九宫格相对偏移（百分比，调这两项让“交叉点”正好落在底图线上） */
-  --board-off-x: 5.8%;   /* 左右内边距 */
-  --board-off-top: 5.8%; /* 上下内边距 */
+  /* 底图到第一条格线的相对偏移（百分比），这组与当前 board.png 对齐 */
+  --board-off-x: 3.5%;
+  --board-off-top: 6.0%;
 
-  /* 棋子图片尺寸（相对单格宽度的百分比） */
+  /* 棋子在单格中占比（0.74~0.80 都可） */
   --piece-scale: 0.76;
 
-  /* 选中/可走标记尺寸 */
+  /* 提示/高亮 */
   --hint-dot: 18px;
   --ring-thickness: 3px;
-
-  /* 文字棋子的直径（相对单格） */
-  --text-piece-scale: 0.7;
 
   /* 颜色 */
   --red: #d34b41;
@@ -25,11 +24,15 @@
   --last-move: rgba(255, 206, 0, .18);
 }
 
+/* =========================
+   基础排版
+   ========================= */
 *{box-sizing:border-box}
 html,body{height:100%}
 body{
   margin:0;
-  font:14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft Yahei", "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  font:14px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC",
+       "Microsoft Yahei", "Helvetica Neue", Arial, "Noto Sans", sans-serif;
   color:#222;
   background:#faf7f2;
   display:flex;
@@ -37,31 +40,29 @@ body{
   justify-content:center;
   padding:24px 16px 40px;
 }
+.app{width:100%; max-width:860px}
+h1{margin:.2em 0 .6em}
 
-/* 一个容器，按需有的话就套着；没有也没关系 */
-.app{width:100%;max-width:820px}
-
-/* ====== 棋盘容器 ====== */
+/* =========================
+   棋盘容器
+   ========================= */
 #board{
   position:relative;
   width:var(--board-max-width);
-  aspect-ratio: 9 / 10;                  /* 象棋盘比例 */
-  background:url("./board.png") center/100% 100% no-repeat;
+  aspect-ratio: 9 / 10;                         /* 中国象棋比例 */
+  background:url("./board.png") center / 100% 100% no-repeat;
   margin:12px auto 16px;
   overflow:visible;
   -webkit-tap-highlight-color: transparent;
+
+  /* 暴露给 JS 的变量（JS 读取后计算步长） */
+  --off-x: var(--board-off-x);
+  --off-top: var(--board-off-top);
 }
 
-/* 为了 JS 更好算位移，暴露给 JS 的两个变量（JS 可用 getComputedStyle 读取） */
-#board{
-  --off-x: 3.5%;
-  --off-top: 6%;
-  /* 如果你做了 --board-img-size / --board-img-top-offset，也可以一起调 */
-}
-
-
-/* ====== 单元格（交叉点） ====== */
-/* .cell 会由 JS 放 9x10 个，left/top 由 JS 用百分比定位到交叉点 */
+/* =========================
+   网格交叉点（由 JS 生成 9x10 个）
+   ========================= */
 .cell{
   position:absolute;
   width:1px; height:1px;                 /* 交叉点本体很小 */
@@ -69,98 +70,72 @@ body{
   transform:translate(-50%,-50%);        /* 以交叉点为中心 */
   cursor:pointer;
 }
-
-/* 为触摸/鼠标交互增加更大的“可点区域” */
+/* 扩大可点区域（不影响布局） */
 .cell::before{
   content:"";
   position:absolute; left:50%; top:50%;
   transform:translate(-50%,-50%);
-  width: max(36px, 9%);                   /* 点按半径，可按需调小/调大 */
-  height: max(36px, 9%);
+  width:max(36px, 9%); height:max(36px, 9%);
   border-radius:50%;
-  background: transparent;
+  background:transparent;
 }
 
-/* ====== 棋子（图片版） ====== */
+/* =========================
+   圆形相框棋子（图片版）
+   ========================= */
 .piece-img{
-  position:absolute;
-  left:50%; top:50%;
-  transform:translate(-50%,-50%);
-  width:calc(var(--piece-scale) * 100%);   /* 相对单格 */
+  position:absolute; left:50%; top:50%;
+  transform:translate(-50%, -50%);
+  width:calc(var(--piece-scale) * 100%);
   aspect-ratio:1/1;
   object-fit:contain;
-  pointer-events:none;
-  user-select:none;
-  image-rendering:auto;
-  filter: drop-shadow(0 1px 0 rgba(0,0,0,.05));
-}
 
-/* ====== 棋子（文字版，保留兼容） ====== */
-.piece{
-  position:absolute;
-  left:50%; top:50%;
-  transform:translate(-50%,-50%);
-  width:calc(var(--text-piece-scale) * 100%);
-  aspect-ratio:1/1;
+  /* 圆形相框效果 */
   border-radius:50%;
-  display:flex; align-items:center; justify-content:center;
-  font-weight:700; font-size: clamp(14px, 3.6vw, 22px);
-  background:#fffdf7;
-  border:2px solid #c9b9a5;
-  box-shadow: 0 1px 0 rgba(0,0,0,.05), inset 0 0 0 1px rgba(255,255,255,.6);
-  user-select:none; pointer-events:none;
-}
-.piece.red{ color:var(--red); }
-.piece.black{ color:var(--black); }
+  background:#fffdf7;                        /* 相框底色 */
+  border:2px solid #c9b9a5;                  /* 外圈描边 */
+  box-shadow:
+    0 1px 0 rgba(0,0,0,.06),
+    inset 0 0 0 1px rgba(255,255,255,.65);   /* 内高光 */
+  padding:6%;                                /* 留出相框边 */
 
-/* ====== 高亮、提示、最后一步 ====== */
-.cell .hint{                               /* 可走点：空位 */
-  position:absolute;
-  left:50%; top:50%;
+  pointer-events:none; user-select:none;
+  image-rendering:auto;
+}
+
+/* =========================
+   提示 / 选中 / 上一步
+   ========================= */
+.cell .hint{
+  position:absolute; left:50%; top:50%;
   transform:translate(-50%,-50%);
   width:var(--hint-dot); height:var(--hint-dot);
   border-radius:50%;
   background:var(--hint);
-  box-shadow: 0 0 0 2px rgba(0,0,0,.14) inset;
+  box-shadow:0 0 0 2px rgba(0,0,0,.14) inset;
 }
-
-.cell .capture{                             /* 可吃子：描边环 */
-  position:absolute;
-  left:50%; top:50%;
+.cell .capture{
+  position:absolute; left:50%; top:50%;
   transform:translate(-50%,-50%);
   width:calc(100% * var(--piece-scale));
   aspect-ratio:1/1;
-  border: var(--ring-thickness) solid var(--ring);
+  border:var(--ring-thickness) solid var(--ring);
   border-radius:50%;
 }
-
-.cell.last{                                 /* 上一步起点/终点背景微黄 */
-  background: var(--last-move);
-  border-radius:12%;
-}
-
-/* 被选中的棋子加高亮环（给父层加 .selected） */
 .selected .select-ring{
-  position:absolute;
-  left:50%; top:50%;
+  position:absolute; left:50%; top:50%;
   transform:translate(-50%,-50%);
-  width:calc(100% * var(--piece-scale) + 8px);
+  width:calc(100% * var(--piece-scale) + 10px);
   aspect-ratio:1/1;
-  border: var(--ring-thickness) solid var(--ring);
+  border:var(--ring-thickness) solid var(--ring);
   border-radius:50%;
-  box-shadow: 0 0 10px rgba(0,152,255,.25);
+  box-shadow:0 0 10px rgba(0,152,255,.25);
 }
+.cell.last{ background:var(--last-move); border-radius:12%; }
 
-/* ====== 行列标签（可选） ====== */
-.row-label,.col-label{
-  position:absolute; color:#7a7a7a;
-  font-size:12px;
-  pointer-events:none; user-select:none;
-}
-.row-label{ left:-18px; top:50%; transform:translateY(-50%); }
-.col-label{ left:50%; bottom:-18px; transform:translateX(-50%); }
-
-/* ====== 顶部控制区（难度/按钮等，可按需使用） ====== */
+/* =========================
+   工具栏（可选）
+   ========================= */
 .toolbar{
   display:flex; flex-wrap:wrap; gap:8px;
   align-items:center; justify-content:center;
@@ -170,14 +145,21 @@ button{
   appearance:none; border:none; border-radius:12px;
   padding:8px 14px; background:#f0eee9; color:#333;
   cursor:pointer; font-weight:600;
-  box-shadow: 0 1px 0 rgba(0,0,0,.04);
+  box-shadow:0 1px 0 rgba(0,0,0,.04);
 }
-button:hover{ background:#e8e5de; }
-button:active{ transform:translateY(1px); }
-button.primary{ background:#2b7cff; color:#fff; }
-button.danger{ background:#e74c3c; color:#fff; }
+button:hover{ background:#e8e5de }
+button:active{ transform:translateY(1px) }
+button.primary{ background:#2b7cff; color:#fff }
+button.danger{ background:#e74c3c; color:#fff }
 
-/* ====== 响应式 ====== */
+/* =========================
+   彻底禁用文字棋子/坐标字母（防止旧代码残留）
+   ========================= */
+.piece, .row-label, .col-label { display:none !important; }
+
+/* =========================
+   响应式
+   ========================= */
 @media (min-width:860px){
   body{ padding-top:32px }
 }
