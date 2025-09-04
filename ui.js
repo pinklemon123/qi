@@ -81,7 +81,8 @@ function init(){
 
 resetBtn?.addEventListener('click', init);
 undoBtn?.addEventListener('click', undoMove);
-menuBtn?.addEventListener('click', () => { location.href = './mode.html'; });
+menuBtn?.addEventListener('click', () => { location.href = './index.html'; });
+
 
 aiLevelSel?.addEventListener('change', () => {
   aiLevel = aiLevelSel.value || 'medium';

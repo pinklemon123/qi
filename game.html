@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>中国象棋</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="app" id="app">
+    <h1>中国象棋</h1>
+
+    <div class="toolbar">
+      <label><input type="checkbox" id="aiRedToggle"> 红方AI</label>
+      <label><input type="checkbox" id="aiBlackToggle"> 黑方AI</label>
+      <select id="aiLevel" title="AI难度">
+        <option value="easy">简单</option>
+        <option value="medium" selected>普通</option>
+        <option value="hard">困难</option>
+      </select>
+      <button id="resetBtn" class="primary">重新开始</button>
+      <button id="undoBtn">悔棋一步</button>
+      <button id="menuBtn">返回菜单</button>
+    </div>
+
+    <div id="board" aria-label="中国象棋棋盘" role="grid"></div>
+    <div id="status" aria-live="polite">准备就绪</div>
+  </div>
+  
+  <!-- ui.js 是入口，它内部 import 了 logic.js -->
+  <script type="module" src="./ui.js"></script>
+</body>
+</html>
