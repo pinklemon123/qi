@@ -2,8 +2,10 @@
    全局变量（可按需微调）
    ========================= */
 :root{
-  /* 棋盘整体大小：更大，随短边缩放 */
-  --board-max-width: min(98vmin, 1100px);
+  /* 取 vmin 和 vw 中更大的那个，再上限到 1400px */
+  --board-max-width: min( max(98vmin, 98vw), 1400px );
+
+
 
   /* 与当前 board.png 对齐的偏移（百分比） */
   --board-off-x: 3.4%;
@@ -40,7 +42,9 @@ body{
   justify-content:center;
   padding:24px 16px 40px;
 }
-.app{ width:100%; max-width:1200px }  /* 保持更大的容器 */
+/* 让外层不再卡 1200px */
+.app{ width:100%; max-width:1400px; }  /* 想更大就改 1600/1800 */
+
 h1{margin:.2em 0 .6em}
 
 /* =========================
