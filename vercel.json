@@ -1,7 +1,12 @@
 {
   "version": 2,
   "rewrites": [
-    { "source": "/ai/move", "destination": "/api/ai/move" }
+    { "source": "/ai/move", "destination": "/api/ai/move" },
+    { "source": "/", "destination": "/mode.html" }
   ]
+
+
+
+
 }
 
