@@ -1,12 +1,7 @@
 {
   "version": 2,
-  "builds": [
-    { "src": "qi-main/api/**/*.js", "use": "@vercel/node" },
-    { "src": "qi-main/**", "use": "@vercel/static" }
-  ],
   "rewrites": [
-    { "source": "/ai/move", "destination": "/api/ai/move" },
-    { "source": "/(.*)", "destination": "/qi-main/$1" }
+    { "source": "/ai/move", "destination": "/api/ai/move" }
   ]
 }
 
