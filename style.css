@@ -3,12 +3,12 @@
    ========================= */
 :root{
   /* 取 vmin 和 vw 中更大的那个，再上限到 1400px */
-  --board-max-width: min( max(100vmin, 100vw), 1600px );
+  --board-max-width: min( max(100vmin, 100vw), 1400px );
 
 
 
   /* 与当前 board.png 对齐的偏移（百分比） */
-  --board-off-x: 3.7%;
+  --board-off-x: 4%;
   --board-off-top: 6.0%;
 
   /* 棋子在单格中占比（0.74~0.80 都可） */
@@ -43,7 +43,7 @@ body{
   padding:24px 16px 40px;
 }
 /* 让外层不再卡 1200px */
-.app{ width:100%; max-width:1600px; }  /* 想更大就改 1600/1800 */
+.app{ width:100%; max-width:1400px; }  /* 想更大就改 1600/1800 */
 
 h1{margin:.2em 0 .6em}
 
