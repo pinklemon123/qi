@@ -1,20 +1,34 @@
-// ui.js —— 与 DOM 交互；引入 logic.js
+// ui.js —— 渲染/交互/模式选择参数支持；依赖 logic.js
 import {
-  COLORS, TYPES, createInitialBoard, legalMovesAt, isInCheck,
-  checkMateStatus, deepCopyBoard, other, collectAllLegalMoves
+  COLORS, createInitialBoard, legalMovesAt, deepCopyBoard,
+  other, checkMateStatus, isInCheck, collectAllLegalMoves, bestMoveMinimax
 } from './logic.js';
 
-// === DOM ===
-const boardEl       = document.getElementById('board');
-const statusEl      = document.getElementById('status');
-const resetBtn      = document.getElementById('resetBtn');
-const undoBtn       = document.getElementById('undoBtn');
-const aiToggle      = document.getElementById('aiToggle');
-const aiLevelSelect = document.getElementById('aiLevel');
+/* ========== 读取模式页传参（来自 mode.html） ========== */
+// /index.html?redAI=0|1&blackAI=0|1&level=easy|medium|hard
+function getBootParams(){
+  const sp = new URLSearchParams(location.search);
+  return {
+    bootRedAI:   sp.get('redAI') === '1',
+    bootBlackAI: sp.get('blackAI') === '1',
+    bootLevel:   sp.get('level') || 'medium',
+  };
+}
+const { bootRedAI, bootBlackAI, bootLevel } = getBootParams();
 
-// === CSS 变量（与 style.css 对齐） ===
-function readCSSNumbers() {
-  // 优先读 #board 暴露的变量；读不到再读 :root
+/* ========== DOM ========== */
+const boardEl  = document.getElementById('board');
+const statusEl = document.getElementById('status');
+
+const resetBtn   = document.getElementById('resetBtn');
+const undoBtn    = document.getElementById('undoBtn');
+const aiLevelSel = document.getElementById('aiLevel');
+const aiRedTgl   = document.getElementById('aiRedToggle');
+const aiBlackTgl = document.getElementById('aiBlackToggle');
+const menuBtn    = document.getElementById('menuBtn');
+
+/* ========== CSS变量 -> 网格步长 ========== */
+function readCSS() {
   const s1 = getComputedStyle(boardEl);
   const s2 = getComputedStyle(document.documentElement);
   const offX = parseFloat(s1.getPropertyValue('--off-x')) || parseFloat(s2.getPropertyValue('--board-off-x')) || 0;
@@ -23,60 +37,66 @@ function readCSSNumbers() {
   const stepY = (100 - 2*offY) / 9; // 10行 -> 9间距
   return { offX, offY, stepX, stepY };
 }
-let { offX:BOARD_OFF_X, offY:BOARD_OFF_TOP, stepX:BOARD_STEP_X, stepY:BOARD_STEP_Y } = readCSSNumbers();
+let { offX:OX, offY:OY, stepX:SX, stepY:SY } = readCSS();
+window.addEventListener('resize', () => { ({offX:OX, offY:OY, stepX:SX, stepY:SY} = readCSS()); render(); });
 
-// === 图片映射（按你的 14 张图） ===
+/* ========== 图片映射（14张） ========== */
 const PIECE_IMG = {
-  rK: 'img/pieces/red-king.png',
-  rA: 'img/pieces/red-advisor.png',
-  rB: 'img/pieces/red-elephant.png',
-  rN: 'img/pieces/red-horse.png',
-  rR: 'img/pieces/red-rook.png',
-  rC: 'img/pieces/red-cannon.png',
-  rP: 'img/pieces/red-soldier.png',
-  bK: 'img/pieces/black-king.png',
-  bA: 'img/pieces/black-advisor.png',
-  bB: 'img/pieces/black-elephant.png',
-  bN: 'img/pieces/black-horse.png',
-  bR: 'img/pieces/black-rook.png',
-  bC: 'img/pieces/black-cannon.png',
-  bP: 'img/pieces/black-soldier.png',
+  rK:'img/pieces/red-king.png',     rA:'img/pieces/red-advisor.png',
+  rB:'img/pieces/red-elephant.png', rN:'img/pieces/red-horse.png',
+  rR:'img/pieces/red-rook.png',     rC:'img/pieces/red-cannon.png',
+  rP:'img/pieces/red-soldier.png',
+  bK:'img/pieces/black-king.png',   bA:'img/pieces/black-advisor.png',
+  bB:'img/pieces/black-elephant.png', bN:'img/pieces/black-horse.png',
+  bR:'img/pieces/black-rook.png',   bC:'img/pieces/black-cannon.png',
+  bP:'img/pieces/black-soldier.png',
 };
-function codeOf(p){
-  const side = p.color === COLORS.RED ? 'r' : 'b';
-  return side + p.type; // e.g. rK / bP
-}
-function imgSrcOf(p){ return PIECE_IMG[codeOf(p)] || null; }
+const codeOf = p => (p.color===COLORS.RED ? 'r':'b') + p.type;
+const imgSrcOf = p => PIECE_IMG[codeOf(p)] || null;
 
-// === 游戏状态（UI 层） ===
-let board, current, selected=null, legalTargets=[];
-let history = [];
-let blackAI = false;
-let aiLevel = 'medium';
+/* ========== 状态 ========== */
+let board, current, selected=null, targets=[];
+let history=[];                 // 盘面快照
+let redAI   = bootRedAI;
+let blackAI = bootBlackAI;
+let aiLevel = bootLevel;
 let aiThinking = false;
-let animating = false;
+let animating  = false;
 
-// === 事件 ===
-boardEl.addEventListener('click', onBoardClick);
-resetBtn?.addEventListener('click', init);
-undoBtn?.addEventListener('click', undoMove);
-aiToggle?.addEventListener('change', () => { blackAI = !!aiToggle.checked; updateStatus(); maybeTriggerAI(); });
-aiLevelSelect?.addEventListener('change', () => { aiLevel = aiLevelSelect.value || 'medium'; updateStatus(); maybeTriggerAI(); });
-window.addEventListener('resize', () => { ({offX:BOARD_OFF_X, offY:BOARD_OFF_TOP, stepX:BOARD_STEP_X, stepY:BOARD_STEP_Y} = readCSSNumbers()); render(); });
-
-// === 初始化 ===
+/* ========== 初始化/事件 ========== */
 function init(){
   board   = createInitialBoard();
   current = COLORS.RED;
-  selected = null; legalTargets = [];
-  aiThinking = false;
-  if (aiToggle) aiToggle.checked = blackAI;
-  if (aiLevelSelect) aiLevelSelect.value = aiLevel;
+  selected = null; targets = [];
   history = [{ board: deepCopyBoard(board), current }];
+
+  if (aiRedTgl)   aiRedTgl.checked   = redAI;
+  if (aiBlackTgl) aiBlackTgl.checked = blackAI;
+  if (aiLevelSel) aiLevelSel.value   = aiLevel;
+
   render(); updateStatus();
+  // 若开局红方即为 AI，则立即走第一步
+  maybeTriggerAI();
 }
 
-// === 渲染 ===
+resetBtn?.addEventListener('click', init);
+undoBtn?.addEventListener('click', undoMove);
+menuBtn?.addEventListener('click', () => { location.href = './mode.html'; });
+
+aiLevelSel?.addEventListener('change', () => {
+  aiLevel = aiLevelSel.value || 'medium';
+  updateStatus(); maybeTriggerAI();
+});
+aiRedTgl?.addEventListener('change', () => {
+  redAI = !!aiRedTgl.checked;
+  updateStatus(); maybeTriggerAI();
+});
+aiBlackTgl?.addEventListener('change', () => {
+  blackAI = !!aiBlackTgl.checked;
+  updateStatus(); maybeTriggerAI();
+});
+
+/* ========== 渲染 ========== */
 function render(){
   boardEl.innerHTML = '';
   for (let r=0; r<10; r++){
@@ -85,16 +105,13 @@ function render(){
       cell.className = `cell row-${r} col-${c}`;
       cell.dataset.row = r; cell.dataset.col = c;
 
-      const left = BOARD_OFF_X + BOARD_STEP_X * c;
-      const top  = BOARD_OFF_TOP + BOARD_STEP_Y * r;
-      cell.style.left = left + '%';
-      cell.style.top  = top  + '%';
-      cell.style.width  = BOARD_STEP_X + '%';
-      cell.style.height = BOARD_STEP_Y + '%';
+      cell.style.left   = (OX + SX * c) + '%';
+      cell.style.top    = (OY + SY * r) + '%';
+      cell.style.width  = SX + '%';
+      cell.style.height = SY + '%';
 
-       const p = board[r][c];
+      const p = board[r][c];
       if (p) {
-        // 只渲染图片，不再回退到文字，避免出现“帅/將”
         const src = imgSrcOf(p);
         if (src) {
           const img = document.createElement('img');
@@ -104,7 +121,6 @@ function render(){
           img.draggable = false;
           cell.appendChild(img);
         } else {
-          // 没有对应图片就不渲染（可在控制台提示）
           console.warn('Missing piece image for', codeOf(p));
         }
         if (selected && selected.row===r && selected.col===c){
@@ -115,54 +131,76 @@ function render(){
         }
       }
 
-      // 提示：可走/可吃
-      if (selected && legalTargets.some(t => t.row===r && t.col===c)) {
-        const targetHasPiece = !!board[r][c];
+      if (selected && targets.some(t => t.row===r && t.col===c)) {
+        const hasEnemy = !!board[r][c];
         const d = document.createElement('div');
-        d.className = targetHasPiece ? 'capture' : 'hint';
+        d.className = hasEnemy ? 'capture' : 'hint';
         cell.appendChild(d);
       }
 
+      cell.addEventListener('click', onCellClick);
       boardEl.appendChild(cell);
     }
   }
 }
 
+function updateStatus(extra){
+  const sideName = current===COLORS.RED ? '红方' : '黑方';
+  let txt = `${sideName}走棋`;
+  if (isInCheck(board, current)) txt += ' - 将军！';
 
-// === 交互 ===
-function onBoardClick(e){
+  const needAI = (current===COLORS.RED && redAI) || (current===COLORS.BLACK && blackAI);
+  if (needAI) {
+    txt = aiThinking ? `${sideName}AI思考中…` : `${txt}（AI：${aiLevel==='easy'?'简单':aiLevel==='hard'?'困难':'普通'}）`;
+  }
+  if (extra) txt = `${extra} | ${txt}`;
+  if (statusEl) statusEl.textContent = txt;
+}
+
+/* ========== 交互 ========== */
+function onCellClick(e){
   if (aiThinking || animating) return;
-  const rect = boardEl.getBoundingClientRect();
-  const xPct = ((e.clientX - rect.left) / rect.width ) * 100;
-  const yPct = ((e.clientY - rect.top  ) / rect.height) * 100;
-  const c = Math.round((xPct - BOARD_OFF_X)  / BOARD_STEP_X);
-  const r = Math.round((yPct - BOARD_OFF_TOP) / BOARD_STEP_Y);
-  if (r<0 || r>9 || c<0 || c>8) return;
+  // 若当前方是 AI，禁止人类下子
+  if ((current===COLORS.RED && redAI) || (current===COLORS.BLACK && blackAI)) return;
 
-  if (selected && legalTargets.some(t => t.row===r && t.col===c)) {
+  const r = +e.currentTarget.dataset.row;
+  const c = +e.currentTarget.dataset.col;
+
+  if (selected && targets.some(t => t.row===r && t.col===c)) {
     makeAndApplyMove(selected, {row:r, col:c});
     return;
   }
-
   const p = board[r][c];
-  if (p && p.color === current) {
+  if (p && ((current===COLORS.RED && codeOf(p)[0]==='r') || (current===COLORS.BLACK && codeOf(p)[0]==='b'))) {
     selected = {row:r, col:c};
-    legalTargets = legalMovesAt(board, r, c, current);
+    targets  = legalMovesAt(board, r, c, current);
     render(); return;
   }
-
-  selected = null; legalTargets = []; render();
+  selected = null; targets = []; render();
 }
 
-// === 棋子移动/动画 ===
+function makeAndApplyMove(from, to){
+  const legal = legalMovesAt(board, from.row, from.col, current);
+  if (!legal.some(m => m.row===to.row && m.col===to.col)) return;
+
+  const movingPiece = board[from.row][from.col];
+  selected = null; targets = [];
+
+  animateMove(from, to, movingPiece, () => {
+    board[to.row][to.col] = movingPiece;
+    board[from.row][from.col] = null;
+    postMove();
+  });
+}
+
 function animateMove(from, to, piece, done){
   const fromCell = document.querySelector(`.cell.row-${from.row}.col-${from.col}`);
   const toCell   = document.querySelector(`.cell.row-${to.row}.col-${to.col}`);
   if (!fromCell || !toCell) return done();
 
   animating = true;
-const fromEl = fromCell.querySelector('.piece-img');
-const toEl   = toCell.querySelector('.piece-img');
+  const fromEl = fromCell.querySelector('.piece-img');
+  const toEl   = toCell.querySelector('.piece-img');
   if (fromEl) fromEl.style.visibility = 'hidden';
   if (toEl)   toEl.style.visibility   = 'hidden';
 
@@ -170,7 +208,6 @@ const toEl   = toCell.querySelector('.piece-img');
   const a = fromCell.getBoundingClientRect();
   const b = toCell.getBoundingClientRect();
 
-  // 必须克隆图片；若没有 fromEl，则用映射补建一张 <img>
   let clone = fromEl?.cloneNode(true);
   if (!clone) {
     const i = document.createElement('img');
@@ -179,7 +216,6 @@ const toEl   = toCell.querySelector('.piece-img');
     i.alt = codeOf(piece);
     clone = i;
   }
-
   clone.style.position = 'absolute';
   clone.style.left   = (a.left - boardRect.left + a.width/2) + 'px';
   clone.style.top    = (a.top  - boardRect.top  + a.height/2) + 'px';
@@ -199,42 +235,16 @@ const toEl   = toCell.querySelector('.piece-img');
   }, { once:true });
 }
 
-function makeAndApplyMove(from, to){
-  const moves = legalMovesAt(board, from.row, from.col, current);
-  if (!moves.some(m => m.row===to.row && m.col===to.col)) return;
-
-  const movingPiece = board[from.row][from.col];
-  // 先清选中，避免闪烁
-  selected = null; legalTargets = [];
-
-  // 动画后再落子，避免瞬移
-  animateMove(from, to, movingPiece, () => {
-    board[to.row][to.col] = movingPiece;
-    board[from.row][from.col] = null;
-    postMove();
-  });
-}
-
-function undoMove(){
-  if (aiThinking || animating) return;
-  if (history.length <= 1) return;
-  history.pop();
-  const prev = history[history.length-1];
-  board = deepCopyBoard(prev.board);
-  current = prev.current;
-  selected = null; legalTargets = [];
-  render(); updateStatus();
-}
-
 function postMove(){
-  // 回合切换/胜负判定/记录历史/触发AI
   const next = other(current);
   const mate = checkMateStatus(board, next);
+
   if (mate.mate){
-    render(); statusEl.textContent = `${current===COLORS.RED?'红方':'黑方'}胜！（将死）`; return;
+    render(); updateStatus(`${current===COLORS.RED?'红方':'黑方'}胜！（将死）`);
+    return;
   }
   if (mate.stalemate){
-    render(); statusEl.textContent = '和棋（无子可动）'; return;
+    render(); updateStatus('和棋（无子可动）'); return;
   }
 
   current = next;
@@ -243,49 +253,65 @@ function postMove(){
   maybeTriggerAI();
 }
 
-// === 状态条 ===
-function updateStatus(extra){
-  const side = current===COLORS.RED ? '红方' : '黑方';
-  let txt = `${side}走棋`;
-  if (isInCheck(board, current)) txt += ' - 将军！';
-  if (blackAI && current===COLORS.BLACK) {
-    txt = aiThinking ? '黑方AI思考中…' : `${txt}（AI：${aiLevel==='easy'?'简单':aiLevel==='hard'?'困难':'普通'}）`;
-  }
-  if (extra) txt = `${extra} | ${txt}`;
-  if (statusEl) statusEl.textContent = txt;
+function undoMove(){
+  if (aiThinking || animating) return;
+  if (history.length <= 1) return;
+  history.pop();
+  const prev = history[history.length-1];
+  board   = deepCopyBoard(prev.board);
+  current = prev.current;
+  selected = null; targets = [];
+  render(); updateStatus();
+  // 若撤回到 AI 的回合，继续触发
+  maybeTriggerAI();
 }
 
-// === AI ===
+/* ========== AI ========== */
 async function maybeTriggerAI(){
-  if (!(blackAI && current===COLORS.BLACK)) return;
+  const needAI = (current===COLORS.RED && redAI) || (current===COLORS.BLACK && blackAI);
+  if (!needAI) return;
+
   aiThinking = true; updateStatus();
   try{
-    const mv = await requestAIMove();  // 优先调用后端
-    if (mv && isAIMoveValid(mv)) { makeAndApplyMove(mv.from, mv.to); }
-    else {
-      const fallback = fallbackAIMove();
-      if (fallback) makeAndApplyMove(fallback.from, fallback.to);
+    // 优先服务端模型（/api/ai/move），失败则本地策略兜底
+    const mv = await requestAIMove();
+    if (mv && isAIMoveValid(mv)) {
+      makeAndApplyMove(mv.from, mv.to);
+    } else {
+      const fb = fallbackAIMove();
+      if (fb) makeAndApplyMove(fb.from, fb.to);
     }
-  }catch(err){
+  } catch (err){
     console.error('AI move error:', err);
-    const fallback = fallbackAIMove();
-    if (fallback) makeAndApplyMove(fallback.from, fallback.to);
-  }finally{
+    const fb = fallbackAIMove();
+    if (fb) makeAndApplyMove(fb.from, fb.to);
+  } finally {
     aiThinking = false; updateStatus();
+    // 双 AI 时，下一回合继续
+    setTimeout(() => maybeTriggerAI(), 10);
   }
 }
-function fallbackAIMove(){
-  const moves = collectAllLegalMoves(board, COLORS.BLACK);
-  if (!moves.length) return null;
-  // 简易难度策略可以自行扩展；这里直接随机
-  return moves[Math.floor(Math.random()*moves.length)];
-}
+
 function isAIMoveValid(mv){
-  const p = board[mv.from.row][mv.from.col];
-  if (!p || p.color!==COLORS.BLACK) return false;
-  const moves = legalMovesAt(board, mv.from.row, mv.from.col, COLORS.BLACK);
+  const p = board[mv.from.row]?.[mv.from.col];
+  if (!p) return false;
+  const moves = legalMovesAt(board, mv.from.row, mv.from.col, current);
   return moves.some(m => m.row===mv.to.row && m.col===mv.to.col);
 }
+
+function fallbackAIMove(){
+  const moves = collectAllLegalMoves(board, current);
+  if (!moves.length) return null;
+  if (aiLevel==='easy') return moves[Math.floor(Math.random()*moves.length)];
+  if (aiLevel==='medium') {
+    const caps = moves.filter(m => !!board[m.to.row][m.to.col]);
+    const pool = caps.length ? caps : moves;
+    return pool[Math.floor(Math.random()*pool.length)];
+  }
+  // hard: 简单极小极大
+  return bestMoveMinimax(board, current, 2);
+}
+
 function requestAIMove(){
   const legalMoves = collectAllLegalMoves(board, current).map(m => ({
     from: [m.from.row, m.from.col],
@@ -301,21 +327,26 @@ function requestAIMove(){
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify(payload)
-  }).then(r => r.json()).then(o => ({
+  })
+  .then(r => {
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  })
+  .then(o => ({
     from:{row:o.from[0], col:o.from[1]},
     to:{row:o.to[0], col:o.to[1]}
   }));
 }
 
+/* ========== 序列化给后端 ========== */
 function serializeBoardForAI(b){
-  // 与你原先格式一致：10x9，Red 大写，Black 小写，. 为空
   const map = p => {
     if (!p) return '.';
-    const m = { R:'r', N:'n', B:'b', A:'a', K:'k', C:'c', P:'p' }[p.type] || '?';
-    return p.color===COLORS.RED ? m.toUpperCase() : m;
+    const t = { R:'r', N:'n', B:'b', A:'a', K:'k', C:'c', P:'p' }[p.type] || '?';
+    return (codeOf(p)[0]==='r') ? t.toUpperCase() : t;
   };
   return b.map(row => row.map(map).join('')).join('/');
 }
 
-// === 启动 ===
+/* ========== 启动 ========== */
 init();
