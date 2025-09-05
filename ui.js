@@ -18,6 +18,8 @@ const { bootRedAI, bootBlackAI, bootLevel } = getBootParams();
 
 /* ========== DOM ========== */
 const boardEl  = document.getElementById('board');
+if (!boardEl) { console.error('[XQ] #board not found, init skipped'); }
+
 const statusEl = document.getElementById('status');
 
 const resetBtn   = document.getElementById('resetBtn');
@@ -426,4 +428,9 @@ function serializeBoardForAI(b){
 }
 
 /* ========== 启动 ========== */
-init();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+
