@@ -1,184 +1,170 @@
-// /api/ai/move.js
-export const config = { runtime: 'edge' }; // 或删掉用 node 也行
+// /api/ai/move.js — 禁止磨棋/长将/重复局面；红=OpenAI，黑=DeepSeek；启发式兜底
+export const config = { runtime: 'edge' };
 
-const OPENAI_API = process.env.OPENAI_API || 'https://api.openai.com/v1/chat/completions';
+const OPENAI_API   = 'https://api.openai.com/v1/chat/completions';
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
-
-const DEEPSEEK_API = process.env.DEEPSEEK_API || 'https://api.deepseek.com/chat/completions';
+const DEEPSEEK_API = process.env.DEEPSEEK_API || 'https://api.deepseek.com/v1/chat/completions';
 const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
 
-const OPENAI_KEY = process.env.OPENAI_API_KEY;
-const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY;
+const OAI_KEY = process.env.OPENAI_API_KEY || '';
+const DSK_KEY = process.env.DEEPSEEK_API_KEY || '';
 
 export default async function handler(req) {
-  if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
+  if (req.method !== 'POST') return json({ error:'method_not_allowed' }, 405);
 
   let body;
-  try { body = await req.json(); } catch { return json({ error:'bad json' }, 400); }
+  try { body = await req.json(); } catch { return json({ error:'bad_json' }, 400); }
 
-  const { board, side, difficulty='medium', choices } = body || {};
-  if (!board || !side || !Array.isArray(choices) || !choices.length) {
-    return json({ error:'missing board/side/choices' }, 400);
-  }
+  const { board, side, difficulty='medium', repetition={} } = body || {};
+  // 候选名兼容：choices / legalMoves
+  const choices = Array.isArray(body.choices) ? body.choices
+                 : Array.isArray(body.legalMoves) ? body.legalMoves
+                 : null;
 
-  // ---- quick heuristic fallback (also used for easy/medium) ----
+  if (!board || (side!=='r' && side!=='b')) return json({ error:'missing board/side' }, 400);
+  if (!choices || !choices.length) return json({ error:'missing candidates' }, 400);
+
+  const avoidKeys = Array.isArray(repetition.avoidKeys) ? repetition.avoidKeys : [];
+  const historyKeys = Array.isArray(repetition.historyKeys) ? repetition.historyKeys : [];
+  const pingPongCount = Number.isInteger(repetition.pingPongCount) ? repetition.pingPongCount : 0;
+  const checkStreak = (repetition.checkStreak && typeof repetition.checkStreak==='object') ? repetition.checkStreak : { r:0, b:0 };
+
+  // ---- Heuristic scoring (with anti-repetition penalty) ----
   const grid = parseBoard(board); // 10x9 char[][]
-  const scored = scoreChoices(grid, choices, side);
-  const pickHeuristic = (tier) => {
-    // easy: 随机偏差更大
-    // medium: 软最大值
-    // hard: 取分最高（若 LLM 失效也能正常下）
-    if (tier === 'easy')    return randWeighted(scored, 0.6);
-    if (tier === 'medium')  return softmaxPick(scored, 1.2);
-    return scored[0];  // hard 默认最高分
-  };
+  const avoidSet = new Set(avoidKeys);
+  const scored = choices.map((ch, idx) => {
+    const ng = cloneGrid(grid);
+    const [fr,fc] = ch.from, [tr,tc] = ch.to;
+    const mover = ng[fr][fc];               // char
+    const target = ng[tr][tc];
 
-  // 如果没配置密钥，直接用启发式
-  if ((side === 'r' && !OPENAI_KEY) || (side === 'b' && !DEEPSEEK_KEY)) {
-    const pick = pickHeuristic(difficulty);
-    return json({ from: pick.choice.from, to: pick.choice.to });
-  }
-
-  // ---- Ask LLM to pick index among candidates ----
-  const sys = [
-    'You are a Xiangqi (Chinese Chess) assistant.',
-    'You are given the full board and ALL legal candidate moves for the side to move.',
-    'Pick the SINGLE best move index from candidates considering tactics and simple strategy.',
-    'Return ONLY a compact JSON: {"index": <number>} with no extra text.',
-    'Prioritize: checkmate > safe capture > attack high-value piece > improve activity > avoid blunders.',
-  ].join(' ');
-
-  const user = JSON.stringify({
-    side,               // 'r' / 'b'
-    board,              // 10 rows, '/' separated, '.' empty, uppercase=red, lowercase=black
-    candidates: choices // [{from:[r,c], to:[r,c]}]
-  });
-
-  // 带一个“建议起点”供模型参考（但不是强制）
-  const heuristicBest = pickHeuristic(difficulty)?.idx ?? 0;
-
-  const messages = [
-    { role:'system', content: sys },
-    { role:'user',   content: user },
-    { role:'assistant', content: `Suggestion (you may override): {"index": ${heuristicBest}}` }
-  ];
-
-  try {
-    const { index } = await askModel(side, { messages, difficulty });
-    if (Number.isInteger(index) && index >= 0 && index < choices.length) {
-      return json({ index });
-    }
-  } catch (e) {
-    // console.error('LLM error', e);
-  }
-
-  // LLM 失败就用启发式
-  const fallback = pickHeuristic('hard');
-  return json({ from: fallback.choice.from, to: fallback.choice.to });
-}
-
-async function askModel(side, { messages, difficulty }) {
-  if (side === 'r') {
-    // 红方 -> OpenAI
-    const res = await fetch(OPENAI_API, {
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: OPENAI_MODEL,
-        temperature: difficulty==='hard' ? 0.8 : 0.2,
-        response_format: { type: 'json_object' },
-        messages
-      })
-    });
-    const data = await res.json();
-    const text = data?.choices?.[0]?.message?.content?.trim() || '{}';
-    return safeJSON(text);
-  } else {
-    // 黑方 -> DeepSeek
-    const res = await fetch(DEEPSEEK_API, {
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: DEEPSEEK_MODEL,
-        temperature: difficulty==='hard' ? 0.8 : 0.2,
-        response_format: { type: 'json_object' },
-        messages
-      })
-    });
-    const data = await res.json();
-    const text = data?.choices?.[0]?.message?.content?.trim() || '{}';
-    return safeJSON(text);
-  }
-}
-
-// -------- utils: response helper --------
-function json(obj, status=200){ return new Response(JSON.stringify(obj), { status, headers:{'Content-Type':'application/json'} }); }
-function safeJSON(s){ try{ return JSON.parse(s); }catch{ return {}; } }
-
-// -------- utils: board parsing & heuristic scoring --------
-// board: "........./....." 10 rows '/', each 9 chars
-function parseBoard(s){
-  const rows = s.split('/');
-  if (rows.length !== 10) throw new Error('bad board rows');
-  return rows.map(r => r.split(''));
-}
-const VAL = { k:10000, r:500, c:450, n:300, b:250, a:250, p:100 }; // rook>cannon>knight>elephant/advisor>pawn
-function pieceVal(ch){
-  const low = ch.toLowerCase();
-  return VAL[low] ?? 0;
-}
-// 根据 to 位置是否有敌子，给予加分；再加一点“向前”鼓励（兵/卒）
-function scoreChoices(grid, choices, side){
-  const isRed = side === 'r';
-  const res = choices.map((choice, idx) => {
-    const [fr,fc] = choice.from, [tr,tc] = choice.to;
-    const target = grid[tr][tc];
     let s = 0;
+    // capture value
+    if (target && target!=='.') s += val(target);
 
-    // 抓子加分（抓价值越高越好）
-    if (target && target !== '.') {
-      const isEnemy = isRed ? (target === target.toLowerCase()) : (target === target.toUpperCase());
-      if (isEnemy) s += pieceVal(target) || 1;
-      else s -= 5; // 绝不自吃（理论上不会出现，因为 choices 是合法生成）
-    }
-
-    // 兵/卒向前小奖励
-    const mover = grid[fr][fc];
-    if (mover && mover.toLowerCase() === 'p') {
-      s += isRed ? (fr>tr ? 6 : 0) : (tr>fr ? 6 : 0);
-    }
-
-    // 更中心的格子微弱奖励（活跃度）
+    // center activity
     const centerDist = Math.abs(4-tc) + Math.abs(4.5-tr);
     s += (8 - centerDist) * 0.8;
 
-    return { idx, score: s, choice };
+    // pawn push bonus
+    if (mover && mover.toLowerCase()==='p') {
+      const isRed = side==='r';
+      s += isRed ? (fr>tr ? 6 : 0) : (tr>fr ? 6 : 0);
+    }
+
+    // apply move
+    ng[tr][tc] = mover;
+    ng[fr][fc] = '.';
+
+    // next side key (用于“重复局面”黑名单)
+    const nextKey = serializeGrid(ng) + '|' + (side==='r' ? 'b' : 'r');
+
+    // 大幅惩罚：若产生回避局面
+    if (avoidSet.has(nextKey)) s -= 1e4;
+
+    // 一些软惩罚：当前已存在 ping-pong/长将迹象
+    if (pingPongCount >= 5) s -= 500;
+    if ((side==='r' && (checkStreak?.r||0) >= 5) || (side==='b' && (checkStreak?.b||0) >= 5)) s -= 800;
+
+    return { idx, score: s, nextKey };
+  }).sort((a,b)=>b.score-a.score);
+
+  // 若没有密钥，直接按启发式选择
+  if ((side==='r' && !OAI_KEY) || (side==='b' && !DSK_KEY)) {
+    const pick = scored[0];
+    return json({ from: choices[pick.idx].from, to: choices[pick.idx].to });
+  }
+
+  // ---- Ask LLM (with anti-repetition instruction) ----
+  // 强约束：不得选择导致“avoidKeys”的候选；不得长将/长捉/无意义重复
+  const sys = [
+    'You are a Xiangqi (Chinese Chess) assistant.',
+    'You MUST choose exactly ONE move from candidates.',
+    'IMPORTANT RULES:',
+    '- No perpetual repetition (no repeating the same position sequence).',
+    '- No perpetual check (长将) and no perpetual chase (长捉).',
+    '- If a candidate leads to a repeated/forbidden position (avoidKeys), DO NOT choose it.',
+    'Prefer breaking repetition even if the local tactic looks tempting, unless a forced mate exists.',
+    'Return ONLY JSON: {"index": <number>} with no extra text.'
+  ].join(' ');
+
+  const user = JSON.stringify({
+    side,                   // 'r' / 'b'
+    board,                  // 10x9, '/' rows, '.' empty, UPPER=red, lower=black
+    candidates: choices,    // [{from:[r,c], to:[r,c]}]
+    repetition: {
+      avoidKeys,
+      historyKeys,
+      pingPongCount,
+      checkStreak
+    }
   });
 
-  // 分数从高到低排序
-  res.sort((a,b)=>b.score - a.score);
-  return res;
-}
-// Softmax 随机（温度越大越随机）
-function softmaxPick(scored, T=1.0){
-  const exp = scored.map(x => Math.exp(x.score / T));
-  const sum = exp.reduce((a,b)=>a+b,0);
-  let r = Math.random()*sum;
-  for (let i=0;i<scored.length;i++){
-    r -= exp[i];
-    if (r<=0) return scored[i];
+  const suggestIdx = scored[0]?.idx ?? 0; // 启发式建议（非强制）
+  const messages = [
+    { role:'system', content: sys },
+    { role:'user',   content: user },
+    { role:'assistant', content: `Suggestion (may override): {"index": ${suggestIdx}}` }
+  ];
+
+  const temperature = ({easy:0.9, medium:0.5, hard:0.2}[String(difficulty).toLowerCase()] ?? 0.5);
+
+  try {
+    const { index } = await askModel(side, { messages, temperature });
+    if (Number.isInteger(index) && index>=0 && index<choices.length) {
+      // 二次校验：若 LLM 仍选择了 avoidKey，退回启发式最佳
+      const chosen = scored.find(s => s.idx===index);
+      if (!chosen || avoidSet.has(chosen.nextKey)) {
+        const safer = scored.find(s => !avoidSet.has(s.nextKey)) || scored[0];
+        return json({ index: safer.idx });
+      }
+      return json({ index });
+    }
+  } catch (e) {
+    // fallthrough to heuristic
   }
-  return scored[0];
+
+  // 兜底：选第一个“非 avoidKey”的候选，否则取 heuristic 第一名
+  const safer = scored.find(s => !avoidSet.has(s.nextKey)) || scored[0];
+  return json({ from: choices[safer.idx].from, to: choices[safer.idx].to });
 }
-// 偏随机（用于 easy）
-function randWeighted(scored, keepTop=0.5){
-  const topK = Math.max(1, Math.floor(scored.length * keepTop));
-  const pool = scored.slice(0, topK);
-  return pool[Math.floor(Math.random()*pool.length)];
+
+// ======== model call helpers ========
+async function askModel(side, { messages, temperature }){
+  if (side === 'r') { // OpenAI
+    const rsp = await fetch(OPENAI_API, {
+      method:'POST',
+      headers:{ 'Authorization': `Bearer ${OAI_KEY}`, 'Content-Type':'application/json' },
+      body: JSON.stringify({ model: OPENAI_MODEL, temperature, response_format:{type:'json_object'}, messages })
+    });
+    const data = await rsp.json();
+    const text = data?.choices?.[0]?.message?.content?.trim() || '{}';
+    return safeJSON(text);
+  } else { // DeepSeek
+    const rsp = await fetch(DEEPSEEK_API, {
+      method:'POST',
+      headers:{ 'Authorization': `Bearer ${DSK_KEY}`, 'Content-Type':'application/json' },
+      body: JSON.stringify({ model: DEEPSEEK_MODEL, temperature, messages })
+    });
+    const data = await rsp.json();
+    let text = data?.choices?.[0]?.message?.content?.trim() || '{}';
+    if (text.startsWith('```')) text = text.replace(/^```(json)?/i,'').replace(/```$/,'').trim();
+    return safeJSON(text);
+  }
+}
+
+// ======== utils ========
+function json(obj, status=200){ return new Response(JSON.stringify(obj), { status, headers:{'Content-Type':'application/json'} }); }
+function safeJSON(s){ try{ return JSON.parse(s); }catch{ return {}; } }
+
+function parseBoard(s){
+  const rows = String(s||'').split('/');
+  if (rows.length !== 10) throw new Error('bad board');
+  return rows.map(r => r.split(''));
+}
+function cloneGrid(g){ return g.map(r => r.slice()); }
+function serializeGrid(g){ return g.map(r => r.join('')).join('/'); }
+function val(ch){
+  const v = { k:10000, r:500, c:450, n:300, b:250, a:250, p:100 };
+  return v[String(ch).toLowerCase()] || 0;
 }

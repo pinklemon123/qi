@@ -1,7 +1,6 @@
-// ui.js —— UI/交互层（含图片加载增强、红/黑双 AI、URL 参数预设、候选走法传后端）
-// 依赖：logic.js 提供棋规与棋盘状态操作
+// ui.js —— UI/交互层（含图片加载增强、反重复/防长将告警、红/黑双 AI、URL 参数预设、候选走法传后端）
 import {
-  COLORS, TYPES, createInitialBoard, legalMovesAt, isInCheck,
+  COLORS, createInitialBoard, legalMovesAt, isInCheck,
   checkMateStatus, deepCopyBoard, other, collectAllLegalMoves
 } from './logic.js';
 
@@ -14,34 +13,24 @@ const aiRedToggle   = document.getElementById('aiRedToggle');
 const aiBlackToggle = document.getElementById('aiBlackToggle');
 const aiLevelSelect = document.getElementById('aiLevel');
 
-// ========== 棋子图片映射（按你的 14 张） ========== //
+// ========== 棋子图片映射（14 张） ========== //
 const PIECE_IMG = {
-  rK: 'img/pieces/red-king.png',
-  rA: 'img/pieces/red-advisor.png',
-  rB: 'img/pieces/red-elephant.png',
-  rN: 'img/pieces/red-horse.png',
-  rR: 'img/pieces/red-rook.png',
-  rC: 'img/pieces/red-cannon.png',
+  rK: 'img/pieces/red-king.png',     rA: 'img/pieces/red-advisor.png',
+  rB: 'img/pieces/red-elephant.png', rN: 'img/pieces/red-horse.png',
+  rR: 'img/pieces/red-rook.png',     rC: 'img/pieces/red-cannon.png',
   rP: 'img/pieces/red-soldier.png',
-  bK: 'img/pieces/black-king.png',
-  bA: 'img/pieces/black-advisor.png',
-  bB: 'img/pieces/black-elephant.png',
-  bN: 'img/pieces/black-horse.png',
-  bR: 'img/pieces/black-rook.png',
-  bC: 'img/pieces/black-cannon.png',
+  bK: 'img/pieces/black-king.png',   bA: 'img/pieces/black-advisor.png',
+  bB: 'img/pieces/black-elephant.png', bN: 'img/pieces/black-horse.png',
+  bR: 'img/pieces/black-rook.png',   bC: 'img/pieces/black-cannon.png',
   bP: 'img/pieces/black-soldier.png',
 };
 const ALL_PIECE_URLS = [...new Set(Object.values(PIECE_IMG))];
 
-function codeOf(p){
-  const side = p.color === COLORS.RED ? 'r' : 'b';
-  return side + p.type; // e.g. rK / bP
-}
+function codeOf(p){ return (p.color===COLORS.RED ? 'r':'b') + p.type; }
 function imgSrcOf(p){ return PIECE_IMG[codeOf(p)] || null; }
 
 // ========== 读 CSS 变量（与 style.css 对齐） ========== //
 function readCSSNumbers() {
-  // 优先读 #board 上暴露的变量；读不到再读 :root
   const s1 = getComputedStyle(boardEl);
   const s2 = getComputedStyle(document.documentElement);
   const offX = parseFloat(s1.getPropertyValue('--off-x')) || parseFloat(s2.getPropertyValue('--board-off-x')) || 0;
@@ -61,14 +50,12 @@ function preloadPieces(timeoutMs = 12000){
     const im = new Image();
     im.decoding = 'async';
     im.loading = 'eager';
-    // fetchPriority 在部分浏览器支持
     try { im.fetchPriority = 'high'; } catch {}
     im.onload = () => resolve(true);
-    im.onerror = () => resolve(false); // 预加载失败不阻塞
+    im.onerror = () => resolve(false);
     im.src = u;
   }));
   preloadedOnce = true;
-  // 无论成败都别卡住：竞速 timeout，只是为了更快进入下一步
   return Promise.race([Promise.all(jobs), timeout]).catch(()=>{});
 }
 
@@ -80,15 +67,30 @@ function scheduleRender(){
   requestAnimationFrame(() => { renderScheduled = false; render(); });
 }
 
+// ========== 反重复 / 防长将参数 ========== //
+const REP_LIMIT = 5;         // 同局面 ≥5 次 -> 警告
+const PINGPONG_LIMIT = 5;    // A→B / B→A 来回 ≥5 次 -> 警告
+const CHECK_STREAK_LIMIT = 5;// 同一方连续将军 ≥5 次 -> 警告
+
+// 局面重复：key = serializeBoardForAI(board)+'|'+(当前行棋方 'r'/'b')
+const repCounts = new Map();         // Map<posKey, count>
+const historyPosKeys = [];           // 最近的 posKey（最多存 40）
+const AVOID_KEYS_SEND_THRESHOLD = 4; // ≥4 次的局面，强烈建议 AI 回避（发给后端）
+
+// 来回对走检测（ping-pong）
+let pingPongCount = 0;
+let lastMove = null;  // {from:{r,c}, to:{r,c}}
+let prevMove = null;  // 记录对手上一手（用于判断往返）
+
+// 同一方连续将军次数
+const checkStreak = { r:0, b:0 };
+
 // ========== 游戏状态（UI 层） ========== //
 let board, current, selected=null, legalTargets=[];
 let history = [];
-let redAI = false;
-let blackAI = false;
-let aiLevelR = 'medium';
-let aiLevelB = 'medium';
-let aiThinking = false; // AI 思考中 -> 禁止用户操作
-let animating = false;  // 动画进行中 -> 禁止重渲染导致闪烁
+let redAI = false, blackAI = false;
+let aiLevelR = 'medium', aiLevelB = 'medium';
+let aiThinking = false, animating = false;
 
 // ========== 事件 ========== //
 boardEl.addEventListener('click', onBoardClick);
@@ -114,6 +116,20 @@ function getURLParams(){
   };
 }
 
+// ========== 序列化（供 AI/重复检测） ========== //
+function serializeBoardForAI(b){
+  const map = p => {
+    if (!p) return '.';
+    const m = { R:'r', N:'n', B:'b', A:'a', K:'k', C:'c', P:'p' }[p.type] || '?';
+    return p.color===COLORS.RED ? m.toUpperCase() : m;
+  };
+  return b.map(row => row.map(map).join('')).join('/');
+}
+function posKeyForSide(b, side){ // side: COLORS.RED/BLACK
+  const s = (side===COLORS.RED) ? 'r':'b';
+  return serializeBoardForAI(b) + '|' + s;
+}
+
 // ========== 初始化 ========== //
 async function init(){
   const preset = getURLParams();
@@ -121,11 +137,9 @@ async function init(){
   board   = createInitialBoard();
   current = COLORS.RED;
   selected = null; legalTargets = [];
-  aiThinking = false;
-  redAI   = preset.aiRed;
-  blackAI = preset.aiBlack;
-  aiLevelR = preset.aiLevelR;
-  aiLevelB = preset.aiLevelB;
+  aiThinking = false; animating = false;
+  redAI   = preset.aiRed;   blackAI = preset.aiBlack;
+  aiLevelR = preset.aiLevelR; aiLevelB = preset.aiLevelB;
 
   if (aiRedToggle)   aiRedToggle.checked   = redAI;
   if (aiBlackToggle) aiBlackToggle.checked = blackAI;
@@ -133,18 +147,26 @@ async function init(){
 
   history = [{ board: deepCopyBoard(board), current }];
 
-  // 不阻塞首屏：预加载并行进行，但马上渲染；图片元素自身也会高优先级拉取
+  // 重置重复检测器
+  repCounts.clear();
+  historyPosKeys.length = 0;
+  pingPongCount = 0;
+  lastMove = null; prevMove = null;
+  checkStreak.r = 0; checkStreak.b = 0;
+
+  // 记录开局局面
+  touchPositionCounter();
+
   preloadPieces();
   render(); updateStatus();
 
-  // 开局若启用“红方AI”，它会直接先手
   maybeTriggerAI();
 }
 
 // ========== 渲染（含图片加载增强） ========== //
 function render(){
   if (!boardEl) return;
-  if (animating) return; // 动画期间避免强制重绘导致闪烁
+  if (animating) return;
 
   boardEl.innerHTML = '';
   for (let r=0; r<10; r++){
@@ -170,44 +192,29 @@ function render(){
           img.alt = codeOf(p);
           img.draggable = false;
 
-          // ——加载增强：尽快解码/拉取 + 失败重试一次 + 兜底文字——
+          // 加速加载 + 失败重试 + 兜底文字
           img.decoding = 'async';
           img.loading = 'eager';
           try { img.fetchPriority = 'high'; } catch {}
-
           img.onerror = () => {
-            // 重试一次（防止偶发 429/缓存抖动/CDN 抽风）
             if (!img.dataset._retried) {
               img.dataset._retried = '1';
-              const bust = (img.src.includes('?') ? '&' : '?') + 'v=' + Date.now();
-              img.src = img.src + bust;
+              img.src = img.src + (img.src.includes('?') ? '&' : '?') + 'v=' + Date.now();
               return;
             }
-            // 第二次仍失败 -> 使用文字兜底，不让格子空白
             img.style.display = 'none';
             const fallback = document.createElement('div');
             fallback.className = 'piece-label';
             fallback.textContent = img.alt?.toUpperCase() || 'X';
-            // 简单样式（若 style.css 未定义 .piece-label）
-            fallback.style.position = 'absolute';
-            fallback.style.left = '50%';
-            fallback.style.top = '50%';
-            fallback.style.transform = 'translate(-50%,-50%)';
-            fallback.style.width = '80%';
-            fallback.style.aspectRatio = '1/1';
-            fallback.style.borderRadius = '50%';
-            fallback.style.display = 'grid';
-            fallback.style.placeItems = 'center';
-            fallback.style.background = '#fffdf7';
-            fallback.style.border = '2px solid #c9b9a5';
-            fallback.style.fontWeight = '700';
-            fallback.style.userSelect = 'none';
+            Object.assign(fallback.style, {
+              position:'absolute', left:'50%', top:'50%', transform:'translate(-50%,-50%)',
+              width:'80%', aspectRatio:'1/1', borderRadius:'50%', display:'grid', placeItems:'center',
+              background:'#fffdf7', border:'2px solid #c9b9a5', fontWeight:'700', userSelect:'none'
+            });
             cell.appendChild(fallback);
           };
 
           cell.appendChild(img);
-        } else {
-          console.warn('Missing piece image for', codeOf(p));
         }
         if (selected && selected.row===r && selected.col===c){
           const ring = document.createElement('div');
@@ -232,7 +239,6 @@ function render(){
 
 // ========== 交互 ========== //
 function onBoardClick(e){
-  // 当前方是 AI 或动画/思考中 -> 禁止用户点击
   if (aiThinking || animating) return;
   if ((current===COLORS.RED && redAI) || (current===COLORS.BLACK && blackAI)) return;
 
@@ -274,7 +280,6 @@ function animateMove(from, to, piece, done){
   const a = fromCell.getBoundingClientRect();
   const b = toCell.getBoundingClientRect();
 
-  // 克隆图片；若 fromEl 不存在就按映射补建
   let clone = fromEl?.cloneNode(true);
   if (!clone) {
     const i = document.createElement('img');
@@ -291,7 +296,7 @@ function animateMove(from, to, piece, done){
   clone.style.left   = (a.left - boardRect.left + a.width/2) + 'px';
   clone.style.top    = (a.top  - boardRect.top  + a.height/2) + 'px';
   clone.style.transform = 'translate(-50%, -50%)';
-  clone.style.transition = 'left .25s ease, top .25s ease';
+  clone.style.transition = 'left 220ms ease, top 220ms ease';
   boardEl.appendChild(clone);
 
   requestAnimationFrame(() => {
@@ -311,13 +316,36 @@ function makeAndApplyMove(from, to){
   if (!moves.some(m => m.row===to.row && m.col===to.col)) return;
 
   const movingPiece = board[from.row][from.col];
-  // 清选中（避免闪烁）
+
+  // 记录 ping-pong（当前走是否与对手上一手反向一致）
+  const thisMove = { from:{row:from.row, col:from.col}, to:{row:to.row, col:to.col} };
+  if (prevMove &&
+      prevMove.from.row===thisMove.to.row && prevMove.from.col===thisMove.to.col &&
+      prevMove.to.row===thisMove.from.row && prevMove.to.col===thisMove.from.col) {
+    pingPongCount++;
+  } else {
+    pingPongCount = 0;
+  }
+
   selected = null; legalTargets = [];
 
-  // 动画后再真正落子
   animateMove(from, to, movingPiece, () => {
     board[to.row][to.col] = movingPiece;
     board[from.row][from.col] = null;
+
+    // 判断是否“将军”（用于长将计数）
+    const opponent = other(current);
+    const gaveCheck = isInCheck(board, opponent);
+    if (current===COLORS.RED) {
+      checkStreak.r = gaveCheck ? (checkStreak.r+1) : 0;
+    } else {
+      checkStreak.b = gaveCheck ? (checkStreak.b+1) : 0;
+    }
+
+    // 更新 last/prev（注意顺序：当前走完，这步成为“lastMove”，对手之前的那步是 prevMove）
+    prevMove = lastMove;
+    lastMove = thisMove;
+
     postMove();
   });
 }
@@ -329,6 +357,12 @@ function undoMove(){
   const prev = history[history.length-1];
   board = deepCopyBoard(prev.board);
   current = prev.current;
+
+  // 撤销后，简单清零反重复计数（实现更严谨的回溯较复杂，这里取折中）
+  repCounts.clear(); historyPosKeys.length = 0;
+  pingPongCount = 0; lastMove=null; prevMove=null; checkStreak.r=0; checkStreak.b=0;
+  touchPositionCounter();
+
   selected = null; legalTargets = [];
   render(); updateStatus();
 }
@@ -343,28 +377,61 @@ function postMove(){
     render(); statusEl.textContent = '和棋（无子可动）'; return;
   }
 
+  // 切换行棋方
   current = next;
   history.push({ board: deepCopyBoard(board), current });
+
+  // 记录新局面并做“磨棋/长将”告警
+  touchPositionCounter();
+
   render(); updateStatus();
   maybeTriggerAI();
 }
 
-// ========== 状态条 ========== //
+// ========== 状态条 / 告警 ========== //
 function updateStatus(extra){
   const sideTxt = current===COLORS.RED ? '红方' : '黑方';
   const inCheck = isInCheck(board, current) ? ' - 将军！' : '';
   let aiNote = '';
   if (current===COLORS.RED && redAI)     aiNote = `（AI：${toCN(aiLevelR)}）`;
   if (current===COLORS.BLACK && blackAI) aiNote = `（AI：${toCN(aiLevelB)}）`;
-  let txt = `${sideTxt}走棋${inCheck} ${aiThinking? '｜AI思考中…':''} ${aiNote}`;
+
+  const warn = buildRepetitionWarningText();
+  let txt = `${sideTxt}走棋${inCheck} ${aiThinking? '｜AI思考中…':''} ${aiNote} ${warn? '｜'+warn : ''}`;
   if (extra) txt = `${extra} | ${txt}`;
   if (statusEl) statusEl.textContent = txt.trim();
 }
-function toCN(level){
-  return level==='easy'?'简单':level==='hard'?'困难':'普通';
+function toCN(level){ return level==='easy'?'简单':level==='hard'?'困难':'普通'; }
+
+function buildRepetitionWarningText(){
+  const manyPos = getAvoidKeys().length>0;
+  const tooPing = pingPongCount >= PINGPONG_LIMIT;
+  const tooCheck= (checkStreak.r>=CHECK_STREAK_LIMIT || checkStreak.b>=CHECK_STREAK_LIMIT);
+  if (manyPos || tooPing || tooCheck){
+    return '⚠️ 避免磨棋/长将：更换走法';
+  }
+  return '';
 }
 
-// ========== AI：按当前方决定是否调用；向后端发送候选步 ==========
+// 记录/统计当前局面；维护 repCounts / historyPosKeys
+function touchPositionCounter(){
+  const key = posKeyForSide(board, current);
+  const n = (repCounts.get(key) || 0) + 1;
+  repCounts.set(key, n);
+  historyPosKeys.push(key);
+  if (historyPosKeys.length > 40) historyPosKeys.shift();
+}
+
+// 需要 AI 回避的局面（≥4 次）
+function getAvoidKeys(){
+  const bad = [];
+  for (const [k,v] of repCounts.entries()){
+    if (v >= AVOID_KEYS_SEND_THRESHOLD) bad.push(k);
+  }
+  return bad;
+}
+
+// ========== AI：按当前方决定是否调用；向后端发送候选步 + 反重复线索 ========== //
 async function maybeTriggerAI(){
   const side = current;
   const needAI = (side===COLORS.RED && redAI) || (side===COLORS.BLACK && blackAI);
@@ -374,6 +441,8 @@ async function maybeTriggerAI(){
   try{
     const mv = await requestAIMove(side);
     if (mv && isAIMoveValid(mv, side)) {
+      // 小延时让观感更自然
+      await new Promise(r => setTimeout(r, 60));
       makeAndApplyMove(mv.from, mv.to);
     } else {
       const fallback = fallbackAIMove(side);
@@ -393,16 +462,17 @@ function isAIMoveValid(mv, side){
   const moves = legalMovesAt(board, mv.from.row, mv.from.col, side);
   return moves.some(m => m.row===mv.to.row && m.col===mv.to.col);
 }
-// 简易启发式兜底（抓子优先+中心偏好+兵/卒向前）
+
+// 启发式兜底：避免导致重复局面的走法
 function fallbackAIMove(side){
   const moves = collectAllLegalMoves(board, side);
   if (!moves.length) return null;
 
+  const avoidSet = new Set(getAvoidKeys());
   const scoreOf = (m)=>{
-    const tgt = board[m.to.row][m.to.col];
     let s = 0;
+    const tgt = board[m.to.row][m.to.col];
     if (tgt) {
-      // 敌子加分（粗略估值）
       const map = { R:500, N:300, B:250, A:250, K:10000, C:450, P:100 };
       const isEnemy = (side===COLORS.RED) ? (tgt.color===COLORS.BLACK) : (tgt.color===COLORS.RED);
       if (isEnemy) s += map[tgt.type] || 1;
@@ -415,18 +485,35 @@ function fallbackAIMove(side){
     if (mover && mover.type==='P') {
       s += side===COLORS.RED ? (m.from.row>m.to.row ? 6 : 0) : (m.to.row>m.from.row ? 6 : 0);
     }
+    // 预测新局面是否在“回避列表”
+    const nextSide = other(side);
+    const simKey = posKeyForSide(simApply(board, m), nextSide);
+    if (avoidSet.has(simKey)) s -= 1e4;
+    if (pingPongCount >= PINGPONG_LIMIT) s -= 500; // 避免来回对走
+    if ((side===COLORS.RED && checkStreak.r>=CHECK_STREAK_LIMIT) ||
+        (side===COLORS.BLACK && checkStreak.b>=CHECK_STREAK_LIMIT)) s -= 800; // 避免长将
     return s;
   };
-  moves.sort((a,b)=>scoreOf(b)-scoreOf(a));
-  // 取前若干中随机一点，别太死板
-  const k = Math.max(1, Math.min(3, Math.floor(moves.length/5)));
-  return moves[Math.floor(Math.random()*k)];
+  const sorted = [...moves].sort((a,b)=>scoreOf(b)-scoreOf(a));
+  for (const m of sorted){
+    const nextSide = other(side);
+    const key = posKeyForSide(simApply(board, m), nextSide);
+    if (!getAvoidKeys().includes(key)) return m;
+  }
+  return sorted[0] || null;
 }
 
-// 向后端发送：棋盘 + 当前方 + 所有候选步；后端从候选中选一手返回
+// 模拟落子（不改原盘）
+function simApply(b, m){
+  const nb = deepCopyBoard(b);
+  nb[m.to.row][m.to.col] = nb[m.from.row][m.from.col];
+  nb[m.from.row][m.from.col] = null;
+  return nb;
+}
+
+// 发送：棋盘 + 当前方 + 候选走法 + 反重复线索
 async function requestAIMove(side){
   const difficulty = side===COLORS.RED ? aiLevelR : aiLevelB;
-
   const choices = collectAllLegalMoves(board, side).map(m => ({
     from: [m.from.row, m.from.col],
     to:   [m.to.row,   m.to.col]
@@ -434,10 +521,16 @@ async function requestAIMove(side){
   if (!choices.length) return null;
 
   const payload = {
-    board: serializeBoardForAI(board),          // "........./..." 10 行，以 '/' 分隔；大写=红，小写=黑，'.'=空
+    board: serializeBoardForAI(board),          // 10行'/'分隔；大写=红，小写=黑，'.'=空
     side:  side===COLORS.RED ? 'r':'b',         // 'r' / 'b'
     difficulty,
-    choices                                     // 候选走法（仅选其一）
+    choices,
+    repetition: {
+      avoidKeys: getAvoidKeys(),                // ≥4 次的局面（强烈回避）
+      historyKeys: historyPosKeys.slice(-20),   // 最近局面（最多 20）
+      pingPongCount,
+      checkStreak
+    }
   };
 
   const res = await fetch('/api/ai/move', {
@@ -448,7 +541,6 @@ async function requestAIMove(side){
   if (!res.ok) throw new Error(`AI HTTP ${res.status}`);
 
   const data = await res.json();
-  // 兼容 {from:[r,c], to:[r,c]} 或 {index:i}
   if (Array.isArray(data?.from) && Array.isArray(data?.to)) {
     return { from:{row:data.from[0], col:data.from[1]}, to:{row:data.to[0], col:data.to[1]} };
   }
@@ -457,16 +549,6 @@ async function requestAIMove(side){
     return { from:{row:pick.from[0], col:pick.from[1]}, to:{row:pick.to[0], col:pick.to[1]} };
   }
   return null;
-}
-
-// LLM 需要的棋盘序列化（保持与后端一致）
-function serializeBoardForAI(b){
-  const map = p => {
-    if (!p) return '.';
-    const m = { R:'r', N:'n', B:'b', A:'a', K:'k', C:'c', P:'p' }[p.type] || '?';
-    return p.color===COLORS.RED ? m.toUpperCase() : m;
-  };
-  return b.map(row => row.map(map).join('')).join('/');
 }
 
 // ========== 启动 ========== //
