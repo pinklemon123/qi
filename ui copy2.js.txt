@@ -1,11 +1,10 @@
-// ui.js —— UI/交互层（含图片加载增强、红/黑双 AI、URL 参数预设、候选走法传后端）
-// 依赖：logic.js 提供棋规与棋盘状态操作
+// ui.js —— 与 DOM 交互；引入 logic.js
 import {
   COLORS, TYPES, createInitialBoard, legalMovesAt, isInCheck,
   checkMateStatus, deepCopyBoard, other, collectAllLegalMoves
 } from './logic.js';
 
-// ========== DOM ========== //
+// === DOM ===
 const boardEl       = document.getElementById('board');
 const statusEl      = document.getElementById('status');
 const resetBtn      = document.getElementById('resetBtn');
@@ -14,7 +13,19 @@ const aiRedToggle   = document.getElementById('aiRedToggle');
 const aiBlackToggle = document.getElementById('aiBlackToggle');
 const aiLevelSelect = document.getElementById('aiLevel');
 
-// ========== 棋子图片映射（按你的 14 张） ========== //
+// === CSS 变量（与 style.css 对齐） ===
+function readCSSNumbers() {
+  const s1 = getComputedStyle(boardEl);
+  const s2 = getComputedStyle(document.documentElement);
+  const offX = parseFloat(s1.getPropertyValue('--off-x')) || parseFloat(s2.getPropertyValue('--board-off-x')) || 0;
+  const offY = parseFloat(s1.getPropertyValue('--off-top')) || parseFloat(s2.getPropertyValue('--board-off-top')) || 0;
+  const stepX = (100 - 2*offX) / 8; // 9列 -> 8间距
+  const stepY = (100 - 2*offY) / 9; // 10行 -> 9间距
+  return { offX, offY, stepX, stepY };
+}
+let { offX:BOARD_OFF_X, offY:BOARD_OFF_TOP, stepX:BOARD_STEP_X, stepY:BOARD_STEP_Y } = readCSSNumbers();
+
+// === 图片映射（按你的 14 张图） ===
 const PIECE_IMG = {
   rK: 'img/pieces/red-king.png',
   rA: 'img/pieces/red-advisor.png',
@@ -31,66 +42,23 @@ const PIECE_IMG = {
   bC: 'img/pieces/black-cannon.png',
   bP: 'img/pieces/black-soldier.png',
 };
-const ALL_PIECE_URLS = [...new Set(Object.values(PIECE_IMG))];
-
 function codeOf(p){
   const side = p.color === COLORS.RED ? 'r' : 'b';
   return side + p.type; // e.g. rK / bP
 }
 function imgSrcOf(p){ return PIECE_IMG[codeOf(p)] || null; }
 
-// ========== 读 CSS 变量（与 style.css 对齐） ========== //
-function readCSSNumbers() {
-  // 优先读 #board 上暴露的变量；读不到再读 :root
-  const s1 = getComputedStyle(boardEl);
-  const s2 = getComputedStyle(document.documentElement);
-  const offX = parseFloat(s1.getPropertyValue('--off-x')) || parseFloat(s2.getPropertyValue('--board-off-x')) || 0;
-  const offY = parseFloat(s1.getPropertyValue('--off-top')) || parseFloat(s2.getPropertyValue('--board-off-top')) || 0;
-  const stepX = (100 - 2*offX) / 8; // 9列 -> 8间距
-  const stepY = (100 - 2*offY) / 9; // 10行 -> 9间距
-  return { offX, offY, stepX, stepY };
-}
-let { offX:BOARD_OFF_X, offY:BOARD_OFF_TOP, stepX:BOARD_STEP_X, stepY:BOARD_STEP_Y } = readCSSNumbers();
-
-// ========== 图片预加载（缓解首渲染慢 & 偶发抖动） ========== //
-let preloadedOnce = false;
-function preloadPieces(timeoutMs = 12000){
-  if (preloadedOnce) return Promise.resolve();
-  const timeout = new Promise((_,rej)=>setTimeout(()=>rej(new Error('preload timeout')), timeoutMs));
-  const jobs = ALL_PIECE_URLS.map(u => new Promise((resolve) => {
-    const im = new Image();
-    im.decoding = 'async';
-    im.loading = 'eager';
-    // fetchPriority 在部分浏览器支持
-    try { im.fetchPriority = 'high'; } catch {}
-    im.onload = () => resolve(true);
-    im.onerror = () => resolve(false); // 预加载失败不阻塞
-    im.src = u;
-  }));
-  preloadedOnce = true;
-  // 无论成败都别卡住：竞速 timeout，只是为了更快进入下一步
-  return Promise.race([Promise.all(jobs), timeout]).catch(()=>{});
-}
-
-// ========== 渲染节流（防止频繁重排） ========== //
-let renderScheduled = false;
-function scheduleRender(){
-  if (renderScheduled) return;
-  renderScheduled = true;
-  requestAnimationFrame(() => { renderScheduled = false; render(); });
-}
-
-// ========== 游戏状态（UI 层） ========== //
+// === 游戏状态（UI 层） ===
 let board, current, selected=null, legalTargets=[];
 let history = [];
 let redAI = false;
 let blackAI = false;
 let aiLevelR = 'medium';
 let aiLevelB = 'medium';
-let aiThinking = false; // AI 思考中 -> 禁止用户操作
-let animating = false;  // 动画进行中 -> 禁止重渲染导致闪烁
+let aiThinking = false; // 用于阻止用户在 AI 落子时点击
+let animating = false;
 
-// ========== 事件 ========== //
+// === 事件 ===
 boardEl.addEventListener('click', onBoardClick);
 resetBtn?.addEventListener('click', init);
 undoBtn?.addEventListener('click', undoMove);
@@ -101,21 +69,21 @@ aiLevelSelect?.addEventListener('change', () => {
   aiLevelB = aiLevelSelect.value || 'medium';
   updateStatus(); maybeTriggerAI();
 });
-window.addEventListener('resize', () => { ({offX:BOARD_OFF_X, offY:BOARD_OFF_TOP, stepX:BOARD_STEP_X, stepY:BOARD_STEP_Y} = readCSSNumbers()); scheduleRender(); });
+window.addEventListener('resize', () => { ({offX:BOARD_OFF_X, offY:BOARD_OFF_TOP, stepX:BOARD_STEP_X, stepY:BOARD_STEP_Y} = readCSSNumbers()); render(); });
 
-// ========== URL 参数（来自 mode.html） ========== //
+// === URL 参数 ===
 function getURLParams(){
   const p = new URLSearchParams(location.search);
   return {
-    aiRed:    p.get('aiRed') === '1',
-    aiBlack:  p.get('aiBlack') === '1',
+    aiRed:   p.get('aiRed') === '1',
+    aiBlack: p.get('aiBlack') === '1',
     aiLevelR: p.get('aiLevelR') || p.get('aiLevel') || 'medium',
     aiLevelB: p.get('aiLevelB') || p.get('aiLevel') || 'medium',
   };
 }
 
-// ========== 初始化 ========== //
-async function init(){
+// === 初始化 ===
+function init(){
   const preset = getURLParams();
 
   board   = createInitialBoard();
@@ -129,23 +97,18 @@ async function init(){
 
   if (aiRedToggle)   aiRedToggle.checked   = redAI;
   if (aiBlackToggle) aiBlackToggle.checked = blackAI;
+  // 若你只想一个全局难度，可把 aiLevelSelect 设成与当前行棋方难度一致
   if (aiLevelSelect) aiLevelSelect.value = current===COLORS.RED ? aiLevelR : aiLevelB;
 
   history = [{ board: deepCopyBoard(board), current }];
-
-  // 不阻塞首屏：预加载并行进行，但马上渲染；图片元素自身也会高优先级拉取
-  preloadPieces();
   render(); updateStatus();
 
-  // 开局若启用“红方AI”，它会直接先手
+  // 开局如果启用了“红方AI”，它会直接先手
   maybeTriggerAI();
 }
 
-// ========== 渲染（含图片加载增强） ========== //
+// === 渲染 ===
 function render(){
-  if (!boardEl) return;
-  if (animating) return; // 动画期间避免强制重绘导致闪烁
-
   boardEl.innerHTML = '';
   for (let r=0; r<10; r++){
     for (let c=0; c<9; c++){
@@ -169,42 +132,14 @@ function render(){
           img.src = src;
           img.alt = codeOf(p);
           img.draggable = false;
-
-          // ——加载增强：尽快解码/拉取 + 失败重试一次 + 兜底文字——
-          img.decoding = 'async';
-          img.loading = 'eager';
-          try { img.fetchPriority = 'high'; } catch {}
-
+          // 兜底：图片失败用文字代替（不影响你现有正常显示）
           img.onerror = () => {
-            // 重试一次（防止偶发 429/缓存抖动/CDN 抽风）
-            if (!img.dataset._retried) {
-              img.dataset._retried = '1';
-              const bust = (img.src.includes('?') ? '&' : '?') + 'v=' + Date.now();
-              img.src = img.src + bust;
-              return;
-            }
-            // 第二次仍失败 -> 使用文字兜底，不让格子空白
             img.style.display = 'none';
             const fallback = document.createElement('div');
             fallback.className = 'piece-label';
             fallback.textContent = img.alt?.toUpperCase() || 'X';
-            // 简单样式（若 style.css 未定义 .piece-label）
-            fallback.style.position = 'absolute';
-            fallback.style.left = '50%';
-            fallback.style.top = '50%';
-            fallback.style.transform = 'translate(-50%,-50%)';
-            fallback.style.width = '80%';
-            fallback.style.aspectRatio = '1/1';
-            fallback.style.borderRadius = '50%';
-            fallback.style.display = 'grid';
-            fallback.style.placeItems = 'center';
-            fallback.style.background = '#fffdf7';
-            fallback.style.border = '2px solid #c9b9a5';
-            fallback.style.fontWeight = '700';
-            fallback.style.userSelect = 'none';
             cell.appendChild(fallback);
           };
-
           cell.appendChild(img);
         } else {
           console.warn('Missing piece image for', codeOf(p));
@@ -230,9 +165,9 @@ function render(){
   }
 }
 
-// ========== 交互 ========== //
+// === 交互 ===
 function onBoardClick(e){
-  // 当前方是 AI 或动画/思考中 -> 禁止用户点击
+  // 当前方是 AI 时，禁止用户点击
   if (aiThinking || animating) return;
   if ((current===COLORS.RED && redAI) || (current===COLORS.BLACK && blackAI)) return;
 
@@ -252,13 +187,13 @@ function onBoardClick(e){
   if (p && p.color === current) {
     selected = {row:r, col:c};
     legalTargets = legalMovesAt(board, r, c, current);
-    scheduleRender(); return;
+    render(); return;
   }
 
-  selected = null; legalTargets = []; scheduleRender();
+  selected = null; legalTargets = []; render();
 }
 
-// ========== 棋子移动/动画 ========== //
+// === 棋子移动/动画 ===
 function animateMove(from, to, piece, done){
   const fromCell = document.querySelector(`.cell.row-${from.row}.col-${from.col}`);
   const toCell   = document.querySelector(`.cell.row-${to.row}.col-${to.col}`);
@@ -274,16 +209,12 @@ function animateMove(from, to, piece, done){
   const a = fromCell.getBoundingClientRect();
   const b = toCell.getBoundingClientRect();
 
-  // 克隆图片；若 fromEl 不存在就按映射补建
   let clone = fromEl?.cloneNode(true);
   if (!clone) {
     const i = document.createElement('img');
     i.className = 'piece-img';
     i.src = imgSrcOf(piece) || '';
     i.alt = codeOf(piece);
-    i.decoding = 'async';
-    i.loading = 'eager';
-    try { i.fetchPriority = 'high'; } catch {}
     clone = i;
   }
 
@@ -311,10 +242,8 @@ function makeAndApplyMove(from, to){
   if (!moves.some(m => m.row===to.row && m.col===to.col)) return;
 
   const movingPiece = board[from.row][from.col];
-  // 清选中（避免闪烁）
   selected = null; legalTargets = [];
 
-  // 动画后再真正落子
   animateMove(from, to, movingPiece, () => {
     board[to.row][to.col] = movingPiece;
     board[from.row][from.col] = null;
@@ -349,12 +278,12 @@ function postMove(){
   maybeTriggerAI();
 }
 
-// ========== 状态条 ========== //
+// === 状态条 ===
 function updateStatus(extra){
   const sideTxt = current===COLORS.RED ? '红方' : '黑方';
   const inCheck = isInCheck(board, current) ? ' - 将军！' : '';
   let aiNote = '';
-  if (current===COLORS.RED && redAI)     aiNote = `（AI：${toCN(aiLevelR)}）`;
+  if (current===COLORS.RED && redAI)   aiNote = `（AI：${toCN(aiLevelR)}）`;
   if (current===COLORS.BLACK && blackAI) aiNote = `（AI：${toCN(aiLevelB)}）`;
   let txt = `${sideTxt}走棋${inCheck} ${aiThinking? '｜AI思考中…':''} ${aiNote}`;
   if (extra) txt = `${extra} | ${txt}`;
@@ -364,7 +293,7 @@ function toCN(level){
   return level==='easy'?'简单':level==='hard'?'困难':'普通';
 }
 
-// ========== AI：按当前方决定是否调用；向后端发送候选步 ==========
+// === AI ===
 async function maybeTriggerAI(){
   const side = current;
   const needAI = (side===COLORS.RED && redAI) || (side===COLORS.BLACK && blackAI);
@@ -373,9 +302,8 @@ async function maybeTriggerAI(){
   aiThinking = true; updateStatus();
   try{
     const mv = await requestAIMove(side);
-    if (mv && isAIMoveValid(mv, side)) {
-      makeAndApplyMove(mv.from, mv.to);
-    } else {
+    if (mv && isAIMoveValid(mv, side)) { makeAndApplyMove(mv.from, mv.to); }
+    else {
       const fallback = fallbackAIMove(side);
       if (fallback) makeAndApplyMove(fallback.from, fallback.to);
     }
@@ -387,79 +315,26 @@ async function maybeTriggerAI(){
     aiThinking = false; updateStatus();
   }
 }
+function fallbackAIMove(side){
+  const moves = collectAllLegalMoves(board, side);
+  if (!moves.length) return null;
+  return moves[Math.floor(Math.random()*moves.length)];
+}
 function isAIMoveValid(mv, side){
   const p = board[mv.from.row][mv.from.col];
   if (!p || p.color!==side) return false;
   const moves = legalMovesAt(board, mv.from.row, mv.from.col, side);
   return moves.some(m => m.row===mv.to.row && m.col===mv.to.col);
 }
-// 简易启发式兜底（抓子优先+中心偏好+兵/卒向前）
-function fallbackAIMove(side){
-  const moves = collectAllLegalMoves(board, side);
-  if (!moves.length) return null;
-
-  const scoreOf = (m)=>{
-    const tgt = board[m.to.row][m.to.col];
-    let s = 0;
-    if (tgt) {
-      // 敌子加分（粗略估值）
-      const map = { R:500, N:300, B:250, A:250, K:10000, C:450, P:100 };
-      const isEnemy = (side===COLORS.RED) ? (tgt.color===COLORS.BLACK) : (tgt.color===COLORS.RED);
-      if (isEnemy) s += map[tgt.type] || 1;
-    }
-    // 中心活跃度
-    const centerDist = Math.abs(4 - m.to.col) + Math.abs(4.5 - m.to.row);
-    s += (8 - centerDist) * 0.8;
-    // 兵/卒向前
-    const mover = board[m.from.row][m.from.col];
-    if (mover && mover.type==='P') {
-      s += side===COLORS.RED ? (m.from.row>m.to.row ? 6 : 0) : (m.to.row>m.from.row ? 6 : 0);
-    }
-    return s;
-  };
-  moves.sort((a,b)=>scoreOf(b)-scoreOf(a));
-  // 取前若干中随机一点，别太死板
-  const k = Math.max(1, Math.min(3, Math.floor(moves.length/5)));
-  return moves[Math.floor(Math.random()*k)];
-}
-
-// 向后端发送：棋盘 + 当前方 + 所有候选步；后端从候选中选一手返回
 async function requestAIMove(side){
   const difficulty = side===COLORS.RED ? aiLevelR : aiLevelB;
-
-  const choices = collectAllLegalMoves(board, side).map(m => ({
-    from: [m.from.row, m.from.col],
-    to:   [m.to.row,   m.to.col]
-  }));
-  if (!choices.length) return null;
-
-  const payload = {
-    board: serializeBoardForAI(board),          // "........./..." 10 行，以 '/' 分隔；大写=红，小写=黑，'.'=空
-    side:  side===COLORS.RED ? 'r':'b',         // 'r' / 'b'
-    difficulty,
-    choices                                     // 候选走法（仅选其一）
-  };
-
-  const res = await fetch('/api/ai/move', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(payload)
-  });
+  const payload = { board: serializeBoardForAI(board), side: side===COLORS.RED ? 'r':'b', difficulty };
+  const res = await fetch('/api/ai/move', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
   if (!res.ok) throw new Error(`AI HTTP ${res.status}`);
-
   const data = await res.json();
-  // 兼容 {from:[r,c], to:[r,c]} 或 {index:i}
-  if (Array.isArray(data?.from) && Array.isArray(data?.to)) {
-    return { from:{row:data.from[0], col:data.from[1]}, to:{row:data.to[0], col:data.to[1]} };
-  }
-  if (Number.isInteger(data?.index) && data.index>=0 && data.index<choices.length) {
-    const pick = choices[data.index];
-    return { from:{row:pick.from[0], col:pick.from[1]}, to:{row:pick.to[0], col:pick.to[1]} };
-  }
-  return null;
+  const pick = (o) => o && Array.isArray(o.from) && Array.isArray(o.to) ? { from:{row:o.from[0], col:o.from[1]}, to:{row:o.to[0], col:o.to[1]} } : null;
+  return pick(data) || pick(data?.move) || null;
 }
-
-// LLM 需要的棋盘序列化（保持与后端一致）
 function serializeBoardForAI(b){
   const map = p => {
     if (!p) return '.';
@@ -469,5 +344,5 @@ function serializeBoardForAI(b){
   return b.map(row => row.map(map).join('')).join('/');
 }
 
-// ========== 启动 ========== //
+// === 启动 ===
 init();
