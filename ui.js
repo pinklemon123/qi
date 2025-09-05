@@ -4,8 +4,8 @@ import {
   other, checkMateStatus, isInCheck, collectAllLegalMoves, bestMoveMinimax
 } from './logic.js';
 
-/* ========== 读取模式页传参（来自 mode.html） ========== */
-// /index.html?redAI=0|1&blackAI=0|1&level=easy|medium|hard
+/* ========== 读取模式页传参（来自 index.html） ========== */
+// /game.html?redAI=0|1&blackAI=0|1&level=easy|medium|hard
 function getBootParams(){
   const sp = new URLSearchParams(location.search);
   return {
@@ -54,7 +54,7 @@ const PIECE_IMG = {
 const codeOf = p => (p.color===COLORS.RED ? 'r':'b') + p.type;
 const imgSrcOf = p => PIECE_IMG[codeOf(p)] || null;
 
-// === 文字棋子兜底（图片缺失也能看到） ===
+/* === 文字棋子兜底（图片缺失也能看到） === */
 const PIECE_TEXT = {
   rK:'帅', rA:'仕', rB:'相', rN:'马', rR:'车', rC:'炮', rP:'兵',
   bK:'将', bA:'士', bB:'象', bN:'马', bR:'车', bC:'炮', bP:'卒',
@@ -81,7 +81,6 @@ function makePieceNode(p) {
   span.textContent = PIECE_TEXT[codeOf(p)] || '?';
   return span;
 }
-
 
 /* ========== 状态 ========== */
 let board, current, selected=null, targets=[];
@@ -112,7 +111,6 @@ resetBtn?.addEventListener('click', init);
 undoBtn?.addEventListener('click', undoMove);
 menuBtn?.addEventListener('click', () => { location.href = '/'; });
 
-
 aiLevelSel?.addEventListener('change', () => {
   aiLevel = aiLevelSel.value || 'medium';
   updateStatus(); maybeTriggerAI();
@@ -142,17 +140,9 @@ function render(){
 
       const p = board[r][c];
       if (p) {
-        const src = imgSrcOf(p);
-        if (src) {
-          const img = document.createElement('img');
-          img.className = 'piece-img';
-          img.src = src;
-          img.alt = codeOf(p);
-          img.draggable = false;
-          cell.appendChild(img);
-        } else {
-          console.warn('Missing piece image for', codeOf(p));
-        }
+        const node = makePieceNode(p);     // ← 使用兜底渲染
+        cell.appendChild(node);
+
         if (selected && selected.row===r && selected.col===c){
           const ring = document.createElement('div');
           ring.className = 'select-ring';
@@ -229,8 +219,8 @@ function animateMove(from, to, piece, done){
   if (!fromCell || !toCell) return done();
 
   animating = true;
-  const fromEl = fromCell.querySelector('.piece-img');
-  const toEl   = toCell.querySelector('.piece-img');
+  const fromEl = fromCell.querySelector('.piece-img, .piece-label');
+  const toEl   = toCell.querySelector('.piece-img, .piece-label');
   if (fromEl) fromEl.style.visibility = 'hidden';
   if (toEl)   toEl.style.visibility   = 'hidden';
 
@@ -240,10 +230,7 @@ function animateMove(from, to, piece, done){
 
   let clone = fromEl?.cloneNode(true);
   if (!clone) {
-    const i = document.createElement('img');
-    i.className = 'piece-img';
-    i.src = imgSrcOf(piece) || '';
-    i.alt = codeOf(piece);
+    const i = makePieceNode(piece);
     clone = i;
   }
   clone.style.position = 'absolute';
@@ -364,7 +351,7 @@ function requestAIMove(){
   })
   .then(o => ({
     from:{row:o.from[0], col:o.from[1]},
-    to:{row:o.to[0], col:o.to[1]}
+    to:{row:o.to[0],   col:o.to[1]}
   }));
 }
 
