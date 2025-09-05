@@ -59,6 +59,65 @@ const PIECE_TEXT = {
   rK:'帅', rA:'仕', rB:'相', rN:'马', rR:'车', rC:'炮', rP:'兵',
   bK:'将', bA:'士', bB:'象', bN:'马', bR:'车', bC:'炮', bP:'卒',
 };
+
+
+function countPieces(b){
+  let n = 0;
+  for (let r=0; r<10; r++) for (let c=0; c<9; c++) if (b[r][c]) n++;
+  return n;
+}
+
+// 用 logic.js 的棋子结构创建一个棋子对象
+function makePiece(color, type){
+  return { color, type }; // 你的 logic.js 正常就是 {color, type}
+}
+
+// 当底层返回空棋盘时，按中国象棋标准开局摆满
+function populateIfEmpty(b){
+  if (countPieces(b) > 0) return b;
+
+  // 红方（底部，行 9..0）
+  b[9][0] = makePiece(COLORS.RED, 'R');
+  b[9][1] = makePiece(COLORS.RED, 'N');
+  b[9][2] = makePiece(COLORS.RED, 'B');
+  b[9][3] = makePiece(COLORS.RED, 'A');
+  b[9][4] = makePiece(COLORS.RED, 'K');
+  b[9][5] = makePiece(COLORS.RED, 'A');
+  b[9][6] = makePiece(COLORS.RED, 'B');
+  b[9][7] = makePiece(COLORS.RED, 'N');
+  b[9][8] = makePiece(COLORS.RED, 'R');
+  b[7][1] = makePiece(COLORS.RED, 'C');
+  b[7][7] = makePiece(COLORS.RED, 'C');
+  b[6][0] = makePiece(COLORS.RED, 'P');
+  b[6][2] = makePiece(COLORS.RED, 'P');
+  b[6][4] = makePiece(COLORS.RED, 'P');
+  b[6][6] = makePiece(COLORS.RED, 'P');
+  b[6][8] = makePiece(COLORS.RED, 'P');
+
+  // 黑方（顶部）
+  b[0][0] = makePiece(COLORS.BLACK, 'R');
+  b[0][1] = makePiece(COLORS.BLACK, 'N');
+  b[0][2] = makePiece(COLORS.BLACK, 'B');
+  b[0][3] = makePiece(COLORS.BLACK, 'A');
+  b[0][4] = makePiece(COLORS.BLACK, 'K');
+  b[0][5] = makePiece(COLORS.BLACK, 'A');
+  b[0][6] = makePiece(COLORS.BLACK, 'B');
+  b[0][7] = makePiece(COLORS.BLACK, 'N');
+  b[0][8] = makePiece(COLORS.BLACK, 'R');
+  b[2][1] = makePiece(COLORS.BLACK, 'C');
+  b[2][7] = makePiece(COLORS.BLACK, 'C');
+  b[3][0] = makePiece(COLORS.BLACK, 'P');
+  b[3][2] = makePiece(COLORS.BLACK, 'P');
+  b[3][4] = makePiece(COLORS.BLACK, 'P');
+  b[3][6] = makePiece(COLORS.BLACK, 'P');
+  b[3][8] = makePiece(COLORS.BLACK, 'P');
+
+  return b;
+}
+
+
+
+
 function makePieceNode(p) {
   const src = imgSrcOf(p);
   if (src) {
@@ -94,6 +153,7 @@ let animating  = false;
 /* ========== 初始化/事件 ========== */
 function init(){
   board   = createInitialBoard();
+  board   = populateIfEmpty(board); // 若为空则摆满
   current = COLORS.RED;
   selected = null; targets = [];
   history = [{ board: deepCopyBoard(board), current }];
