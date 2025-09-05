@@ -54,6 +54,35 @@ const PIECE_IMG = {
 const codeOf = p => (p.color===COLORS.RED ? 'r':'b') + p.type;
 const imgSrcOf = p => PIECE_IMG[codeOf(p)] || null;
 
+// === 文字棋子兜底（图片缺失也能看到） ===
+const PIECE_TEXT = {
+  rK:'帅', rA:'仕', rB:'相', rN:'马', rR:'车', rC:'炮', rP:'兵',
+  bK:'将', bA:'士', bB:'象', bN:'马', bR:'车', bC:'炮', bP:'卒',
+};
+function makePieceNode(p) {
+  const src = imgSrcOf(p);
+  if (src) {
+    const img = document.createElement('img');
+    img.className = 'piece-img';
+    img.src = src;
+    img.alt = codeOf(p);
+    img.draggable = false;
+    // 图片加载失败则退回文字
+    img.onerror = () => {
+      const span = document.createElement('span');
+      span.className = 'piece-label ' + (p.color===COLORS.RED?'red':'black');
+      span.textContent = PIECE_TEXT[codeOf(p)] || '?';
+      img.replaceWith(span);
+    };
+    return img;
+  }
+  const span = document.createElement('span');
+  span.className = 'piece-label ' + (p.color===COLORS.RED?'red':'black');
+  span.textContent = PIECE_TEXT[codeOf(p)] || '?';
+  return span;
+}
+
+
 /* ========== 状态 ========== */
 let board, current, selected=null, targets=[];
 let history=[];                 // 盘面快照

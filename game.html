@@ -5,6 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>中国象棋</title>
   <link rel="stylesheet" href="./style.css" />
+  <style>
+  /* 基础布局，确保棋盘与棋子可见 */
+  #board { position: relative; width: min(92vw, 520px); aspect-ratio: 9 / 10; margin: 12px auto; }
+  #board .cell { position: absolute; box-sizing: border-box; }
+  .piece-img, .piece-label { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; }
+  .piece-img { width: 78%; height: auto; pointer-events: none; }
+  .piece-label { width: 72%; height: 72%; display: grid; place-items: center; border-radius: 50%;
+    font-weight: 700; font-size: clamp(16px, 6.6vw, 28px); color: #111; }
+  .piece-label.red { background: #fbd0d6; border: 2px solid #d85a6a; }
+  .piece-label.black { background: #e2e6ef; border: 2px solid #4a5568; }
+  .select-ring { position:absolute; inset: 8% 8%; border: 3px solid #60a5fa; border-radius: 14px; z-index: 1; }
+</style>
+
 </head>
 <body>
   <div class="app" id="app">
