@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>选择对局模式</title>
+  <link rel="stylesheet" href="style.css"/>
+  <style>
+    .mode-wrap{max-width:760px;margin:32px auto;padding:20px;border-radius:16px;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,.06)}
+    .mode-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px}
+    .mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .card{padding:16px;border-radius:14px;border:1px solid #eee;background:#fafafa}
+    .card h3{margin:0 0 8px;font-size:18px}
+    .row{display:flex;align-items:center;gap:10px;margin:8px 0}
+    .actions{margin-top:18px;display:flex;gap:12px}
+    .btn{padding:10px 16px;border:0;border-radius:10px;cursor:pointer}
+    .btn-primary{background:#2b67ff;color:#fff}
+    .btn-outline{background:#fff;border:1px solid #ddd}
+  </style>
+</head>
+<body>
+  <div class="mode-wrap">
+    <div class="mode-head">
+      <h2>选择对局模式</h2>
+      <a class="btn btn-outline" href="index.html">直接进入棋盘</a>
+    </div>
+
+    <div class="mode-grid">
+      <div class="card">
+        <h3>人类 vs 人类</h3>
+        <div class="row">双方都由玩家操作。</div>
+        <div class="actions">
+          <button class="btn btn-primary" onclick="start('hh')">开始</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>人类 vs AI</h3>
+        <div class="row">
+          <label><input type="radio" name="haSide" value="red" checked> 我执红先手</label>
+          <label><input type="radio" name="haSide" value="black"> 我执黑后手</label>
+        </div>
+        <div class="row">
+          难度：
+          <select id="haLevel">
+            <option value="easy">简单</option>
+            <option value="medium" selected>普通</option>
+            <option value="hard">困难</option>
+          </select>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" onclick="start('ha')">开始</button>
+        </div>
+      </div>
+
+      <div class="card" style="grid-column:1/3">
+        <h3>AI vs AI</h3>
+        <div class="row" style="flex-wrap:wrap;gap:16px">
+          红方AI <select id="aaLevelR">
+            <option value="easy">简单</option>
+            <option value="medium" selected>普通</option>
+            <option value="hard">困难</option>
+          </select>
+          黑方AI <select id="aaLevelB">
+            <option value="easy">简单</option>
+            <option value="medium" selected>普通</option>
+            <option value="hard">困难</option>
+          </select>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" onclick="start('aa')">开始</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+function start(mode){
+  const params = new URLSearchParams();
+  if(mode === 'hh'){
+    params.set('aiRed', '0');
+    params.set('aiBlack', '0');
+  }else if(mode === 'ha'){
+    const side = document.querySelector('input[name="haSide"]:checked').value; // red/black
+    const lvl  = document.getElementById('haLevel').value;
+    // 你操作的一方不是 AI
+    params.set('aiRed',  side === 'red'  ? '0' : '1');
+    params.set('aiBlack',side === 'black'? '0' : '1');
+    params.set('aiLevelR', lvl);
+    params.set('aiLevelB', lvl);
+  }else if(mode === 'aa'){
+    params.set('aiRed', '1');
+    params.set('aiBlack','1');
+    params.set('aiLevelR', document.getElementById('aaLevelR').value);
+    params.set('aiLevelB', document.getElementById('aaLevelB').value);
+  }
+  // 跳到棋盘页
+  location.href = 'index.html?' + params.toString();
+}
+</script>
+</body>
+</html>

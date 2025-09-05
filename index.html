@@ -9,13 +9,20 @@
   <body>
     <div id="app">
       <h1>中国象棋</h1>
-      <div class="top-bar">
-        <div id="status">准备开始</div>
-        <div class="controls">
-          <label style="margin-right:10px; display:inline-flex; align-items:center; gap:6px;">
-            <input type="checkbox" id="aiToggle" /> 黑方AI
+
+      <div class="top-bar" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:10px">
+          <a href="mode.html" class="btn-link" style="text-decoration:none;padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">← 选择模式</a>
+          <div id="status">准备开始</div>
+        </div>
+        <div class="controls" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <label style="display:inline-flex; align-items:center; gap:6px;">
+            <input type="checkbox" id="aiRedToggle" /> 红方AI
           </label>
-          <label style="margin-right:10px; display:inline-flex; align-items:center; gap:6px;">
+          <label style="display:inline-flex; align-items:center; gap:6px;">
+            <input type="checkbox" id="aiBlackToggle" /> 黑方AI
+          </label>
+          <label style="display:inline-flex; align-items:center; gap:6px;">
             难度
             <select id="aiLevel">
               <option value="easy">简单</option>
@@ -32,13 +39,10 @@
 
       <div class="legend">
         <div> 红方先行</div>
-        <div>点击棋子查看可走位置，点目标落子</div>
         <div>点击棋子查看可走位置，点目标落子；点悔棋撤回一步</div>
       </div>
     </div>
 
-<script type="module" src="./ui.js"></script>
-
+    <script type="module" src="./ui.js"></script>
   </body>
-  </html>
-
+</html>

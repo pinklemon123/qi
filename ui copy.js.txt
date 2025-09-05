@@ -9,12 +9,12 @@ const boardEl       = document.getElementById('board');
 const statusEl      = document.getElementById('status');
 const resetBtn      = document.getElementById('resetBtn');
 const undoBtn       = document.getElementById('undoBtn');
-const aiRedToggle   = document.getElementById('aiRedToggle');
-const aiBlackToggle = document.getElementById('aiBlackToggle');
+const aiToggle      = document.getElementById('aiToggle');
 const aiLevelSelect = document.getElementById('aiLevel');
 
 // === CSS 变量（与 style.css 对齐） ===
 function readCSSNumbers() {
+  // 优先读 #board 暴露的变量；读不到再读 :root
   const s1 = getComputedStyle(boardEl);
   const s2 = getComputedStyle(document.documentElement);
   const offX = parseFloat(s1.getPropertyValue('--off-x')) || parseFloat(s2.getPropertyValue('--board-off-x')) || 0;
@@ -51,60 +51,29 @@ function imgSrcOf(p){ return PIECE_IMG[codeOf(p)] || null; }
 // === 游戏状态（UI 层） ===
 let board, current, selected=null, legalTargets=[];
 let history = [];
-let redAI = false;
 let blackAI = false;
-let aiLevelR = 'medium';
-let aiLevelB = 'medium';
-let aiThinking = false; // 用于阻止用户在 AI 落子时点击
+let aiLevel = 'medium';
+let aiThinking = false;
 let animating = false;
 
 // === 事件 ===
 boardEl.addEventListener('click', onBoardClick);
 resetBtn?.addEventListener('click', init);
 undoBtn?.addEventListener('click', undoMove);
-aiRedToggle?.addEventListener('change', () => { redAI = !!aiRedToggle.checked; updateStatus(); maybeTriggerAI(); });
-aiBlackToggle?.addEventListener('change', () => { blackAI = !!aiBlackToggle.checked; updateStatus(); maybeTriggerAI(); });
-aiLevelSelect?.addEventListener('change', () => {
-  aiLevelR = aiLevelSelect.value || 'medium';
-  aiLevelB = aiLevelSelect.value || 'medium';
-  updateStatus(); maybeTriggerAI();
-});
+aiToggle?.addEventListener('change', () => { blackAI = !!aiToggle.checked; updateStatus(); maybeTriggerAI(); });
+aiLevelSelect?.addEventListener('change', () => { aiLevel = aiLevelSelect.value || 'medium'; updateStatus(); maybeTriggerAI(); });
 window.addEventListener('resize', () => { ({offX:BOARD_OFF_X, offY:BOARD_OFF_TOP, stepX:BOARD_STEP_X, stepY:BOARD_STEP_Y} = readCSSNumbers()); render(); });
-
-// === URL 参数 ===
-function getURLParams(){
-  const p = new URLSearchParams(location.search);
-  return {
-    aiRed:   p.get('aiRed') === '1',
-    aiBlack: p.get('aiBlack') === '1',
-    aiLevelR: p.get('aiLevelR') || p.get('aiLevel') || 'medium',
-    aiLevelB: p.get('aiLevelB') || p.get('aiLevel') || 'medium',
-  };
-}
 
 // === 初始化 ===
 function init(){
-  const preset = getURLParams();
-
   board   = createInitialBoard();
   current = COLORS.RED;
   selected = null; legalTargets = [];
   aiThinking = false;
-  redAI   = preset.aiRed;
-  blackAI = preset.aiBlack;
-  aiLevelR = preset.aiLevelR;
-  aiLevelB = preset.aiLevelB;
-
-  if (aiRedToggle)   aiRedToggle.checked   = redAI;
-  if (aiBlackToggle) aiBlackToggle.checked = blackAI;
-  // 若你只想一个全局难度，可把 aiLevelSelect 设成与当前行棋方难度一致
-  if (aiLevelSelect) aiLevelSelect.value = current===COLORS.RED ? aiLevelR : aiLevelB;
-
+  if (aiToggle) aiToggle.checked = blackAI;
+  if (aiLevelSelect) aiLevelSelect.value = aiLevel;
   history = [{ board: deepCopyBoard(board), current }];
   render(); updateStatus();
-
-  // 开局如果启用了“红方AI”，它会直接先手
-  maybeTriggerAI();
 }
 
 // === 渲染 ===
@@ -123,8 +92,9 @@ function render(){
       cell.style.width  = BOARD_STEP_X + '%';
       cell.style.height = BOARD_STEP_Y + '%';
 
-      const p = board[r][c];
+       const p = board[r][c];
       if (p) {
+        // 只渲染图片，不再回退到文字，避免出现“帅/將”
         const src = imgSrcOf(p);
         if (src) {
           const img = document.createElement('img');
@@ -132,16 +102,9 @@ function render(){
           img.src = src;
           img.alt = codeOf(p);
           img.draggable = false;
-          // 兜底：图片失败用文字代替（不影响你现有正常显示）
-          img.onerror = () => {
-            img.style.display = 'none';
-            const fallback = document.createElement('div');
-            fallback.className = 'piece-label';
-            fallback.textContent = img.alt?.toUpperCase() || 'X';
-            cell.appendChild(fallback);
-          };
           cell.appendChild(img);
         } else {
+          // 没有对应图片就不渲染（可在控制台提示）
           console.warn('Missing piece image for', codeOf(p));
         }
         if (selected && selected.row===r && selected.col===c){
@@ -165,12 +128,10 @@ function render(){
   }
 }
 
+
 // === 交互 ===
 function onBoardClick(e){
-  // 当前方是 AI 时，禁止用户点击
   if (aiThinking || animating) return;
-  if ((current===COLORS.RED && redAI) || (current===COLORS.BLACK && blackAI)) return;
-
   const rect = boardEl.getBoundingClientRect();
   const xPct = ((e.clientX - rect.left) / rect.width ) * 100;
   const yPct = ((e.clientY - rect.top  ) / rect.height) * 100;
@@ -200,8 +161,8 @@ function animateMove(from, to, piece, done){
   if (!fromCell || !toCell) return done();
 
   animating = true;
-  const fromEl = fromCell.querySelector('.piece-img');
-  const toEl   = toCell.querySelector('.piece-img');
+const fromEl = fromCell.querySelector('.piece-img');
+const toEl   = toCell.querySelector('.piece-img');
   if (fromEl) fromEl.style.visibility = 'hidden';
   if (toEl)   toEl.style.visibility   = 'hidden';
 
@@ -209,6 +170,7 @@ function animateMove(from, to, piece, done){
   const a = fromCell.getBoundingClientRect();
   const b = toCell.getBoundingClientRect();
 
+  // 必须克隆图片；若没有 fromEl，则用映射补建一张 <img>
   let clone = fromEl?.cloneNode(true);
   if (!clone) {
     const i = document.createElement('img');
@@ -242,8 +204,10 @@ function makeAndApplyMove(from, to){
   if (!moves.some(m => m.row===to.row && m.col===to.col)) return;
 
   const movingPiece = board[from.row][from.col];
+  // 先清选中，避免闪烁
   selected = null; legalTargets = [];
 
+  // 动画后再落子，避免瞬移
   animateMove(from, to, movingPiece, () => {
     board[to.row][to.col] = movingPiece;
     board[from.row][from.col] = null;
@@ -263,6 +227,7 @@ function undoMove(){
 }
 
 function postMove(){
+  // 回合切换/胜负判定/记录历史/触发AI
   const next = other(current);
   const mate = checkMateStatus(board, next);
   if (mate.mate){
@@ -280,55 +245,50 @@ function postMove(){
 
 // === 状态条 ===
 function updateStatus(extra){
-  const sideTxt = current===COLORS.RED ? '红方' : '黑方';
-  const inCheck = isInCheck(board, current) ? ' - 将军！' : '';
-  let aiNote = '';
-  if (current===COLORS.RED && redAI)   aiNote = `（AI：${toCN(aiLevelR)}）`;
-  if (current===COLORS.BLACK && blackAI) aiNote = `（AI：${toCN(aiLevelB)}）`;
-  let txt = `${sideTxt}走棋${inCheck} ${aiThinking? '｜AI思考中…':''} ${aiNote}`;
+  const side = current===COLORS.RED ? '红方' : '黑方';
+  let txt = `${side}走棋`;
+  if (isInCheck(board, current)) txt += ' - 将军！';
+  if (blackAI && current===COLORS.BLACK) {
+    txt = aiThinking ? '黑方AI思考中…' : `${txt}（AI：${aiLevel==='easy'?'简单':aiLevel==='hard'?'困难':'普通'}）`;
+  }
   if (extra) txt = `${extra} | ${txt}`;
-  if (statusEl) statusEl.textContent = txt.trim();
-}
-function toCN(level){
-  return level==='easy'?'简单':level==='hard'?'困难':'普通';
+  if (statusEl) statusEl.textContent = txt;
 }
 
 // === AI ===
 async function maybeTriggerAI(){
-  const side = current;
-  const needAI = (side===COLORS.RED && redAI) || (side===COLORS.BLACK && blackAI);
-  if (!needAI) return;
-
+  if (!(blackAI && current===COLORS.BLACK)) return;
   aiThinking = true; updateStatus();
   try{
-    const mv = await requestAIMove(side);
-    if (mv && isAIMoveValid(mv, side)) { makeAndApplyMove(mv.from, mv.to); }
+    const mv = await requestAIMove();  // 优先调用后端
+    if (mv && isAIMoveValid(mv)) { makeAndApplyMove(mv.from, mv.to); }
     else {
-      const fallback = fallbackAIMove(side);
+      const fallback = fallbackAIMove();
       if (fallback) makeAndApplyMove(fallback.from, fallback.to);
     }
   }catch(err){
     console.error('AI move error:', err);
-    const fallback = fallbackAIMove(side);
+    const fallback = fallbackAIMove();
     if (fallback) makeAndApplyMove(fallback.from, fallback.to);
   }finally{
     aiThinking = false; updateStatus();
   }
 }
-function fallbackAIMove(side){
-  const moves = collectAllLegalMoves(board, side);
+function fallbackAIMove(){
+  const moves = collectAllLegalMoves(board, COLORS.BLACK);
   if (!moves.length) return null;
+  // 简易难度策略可以自行扩展；这里直接随机
   return moves[Math.floor(Math.random()*moves.length)];
 }
-function isAIMoveValid(mv, side){
+function isAIMoveValid(mv){
   const p = board[mv.from.row][mv.from.col];
-  if (!p || p.color!==side) return false;
-  const moves = legalMovesAt(board, mv.from.row, mv.from.col, side);
+  if (!p || p.color!==COLORS.BLACK) return false;
+  const moves = legalMovesAt(board, mv.from.row, mv.from.col, COLORS.BLACK);
   return moves.some(m => m.row===mv.to.row && m.col===mv.to.col);
 }
-async function requestAIMove(side){
-  const difficulty = side===COLORS.RED ? aiLevelR : aiLevelB;
-  const payload = { board: serializeBoardForAI(board), side: side===COLORS.RED ? 'r':'b', difficulty };
+async function requestAIMove(){
+  // 注意：Vercel 的函数路径是 /api/ai/move
+  const payload = { board: serializeBoardForAI(board), side:'b', difficulty:aiLevel };
   const res = await fetch('/api/ai/move', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
   if (!res.ok) throw new Error(`AI HTTP ${res.status}`);
   const data = await res.json();
@@ -336,6 +296,7 @@ async function requestAIMove(side){
   return pick(data) || pick(data?.move) || null;
 }
 function serializeBoardForAI(b){
+  // 与你原先格式一致：10x9，Red 大写，Black 小写，. 为空
   const map = p => {
     if (!p) return '.';
     const m = { R:'r', N:'n', B:'b', A:'a', K:'k', C:'c', P:'p' }[p.type] || '?';
