@@ -1,86 +1,44 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>选择对弈模式</title>
-  <link rel="stylesheet" href="./style.css" />
-  <style>
-    body{ display:grid; place-items:center; padding:20px; }
-    .mode-card{
-      width:min(92vw, 680px);
-      background:#fffdf7; border-radius:16px;
-      box-shadow:0 10px 30px rgba(0,0,0,.12);
-      padding:18px 20px;
-    }
-    .mode-card h2{ margin:0 0 10px }
-    .row{ display:flex; flex-wrap:wrap; gap:12px 16px; align-items:center; margin:12px 0 }
-    .row label{ display:flex; align-items:center; gap:8px; }
-    .actions{ display:flex; gap:10px; justify-content:flex-end; margin-top:6px }
-    .hidden{ display:none !important; }
-    button{ appearance:none; border:none; border-radius:12px; padding:8px 14px; background:#2b7cff; color:#fff; cursor:pointer; font-weight:600; }
-  </style>
-</head>
-<body>
-  <div class="mode-card">
-    <h2>选择对弈模式</h2>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>中国象棋</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <h1>中国象棋</h1>
+      <div class="top-bar">
+        <div id="status">准备开始</div>
+        <div class="controls">
+          <label style="margin-right:10px; display:inline-flex; align-items:center; gap:6px;">
+            <input type="checkbox" id="aiToggle" /> 黑方AI
+          </label>
+          <label style="margin-right:10px; display:inline-flex; align-items:center; gap:6px;">
+            难度
+            <select id="aiLevel">
+              <option value="easy">简单</option>
+              <option value="medium" selected>普通</option>
+              <option value="hard">困难</option>
+            </select>
+          </label>
+          <button id="resetBtn">重新开始</button>
+          <button id="undoBtn">悔棋</button>
+        </div>
+      </div>
 
-    <div class="row">
-      <label><input type="radio" name="mode" value="hvh"> 人类 vs 人类</label>
-      <label><input type="radio" name="mode" value="hvai" checked> 人类 vs AI</label>
-      <label><input type="radio" name="mode" value="aivai"> AI vs AI</label>
+      <div id="board" aria-label="中国象棋棋盘" role="grid"></div>
+
+      <div class="legend">
+        <div> 红方先行</div>
+        <div>点击棋子查看可走位置，点目标落子</div>
+        <div>点击棋子查看可走位置，点目标落子；点悔棋撤回一步</div>
+      </div>
     </div>
 
-    <div class="row" id="aiSideRow">
-      <strong>AI 执方：</strong>
-      <label><input type="radio" name="aiSide" value="red"> 红方</label>
-      <label><input type="radio" name="aiSide" value="black" checked> 黑方</label>
-    </div>
+<script type="module" src="./ui.js"></script>
 
-    <div class="row">
-      <strong>难度：</strong>
-      <select id="level">
-        <option value="easy">简单</option>
-        <option value="medium" selected>普通</option>
-        <option value="hard">困难</option>
-      </select>
-    </div>
+  </body>
+  </html>
 
-    <div class="actions">
-      <button id="go">开始对局</button>
-    </div>
-  </div>
-
-  <script>
-    const radios = [...document.querySelectorAll('input[name="mode"]')];
-    const aiSideRow = document.getElementById('aiSideRow');
-    const go = document.getElementById('go');
-    const level = document.getElementById('level');
-
-    function updateVisibility(){
-      const mode = (radios.find(r => r.checked) || {}).value;
-      aiSideRow.classList.toggle('hidden', mode !== 'hvai');
-    }
-    radios.forEach(r => r.addEventListener('change', updateVisibility));
-    updateVisibility();
-
-    go.addEventListener('click', () => {
-      const mode = (radios.find(r => r.checked) || {}).value;
-      const lv = level.value || 'medium';
-      let redAI = 0, blackAI = 0;
-
-      if (mode === 'hvh') { redAI = 0; blackAI = 0; }
-      if (mode === 'aivai') { redAI = 1; blackAI = 1; }
-      if (mode === 'hvai') {
-        const side = document.querySelector('input[name="aiSide"]:checked')?.value || 'black';
-        redAI = side === 'red' ? 1 : 0;
-        blackAI = side === 'black' ? 1 : 0;
-      }
-
-      // 跳到 game.html，并把选择传过去
-      const q = new URLSearchParams({ redAI, blackAI, level: lv }).toString();
-      window.location.href = `./game.html?${q}`;
-    });
-  </script>
-</body>
-</html>
