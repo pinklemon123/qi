@@ -170,6 +170,10 @@ function onBoardClick(e){
     const to   = { row: r,          col: c };
     doAnimatedMove(from, to, () => {
       const ret = core.commitMove(from, to);
+
+    // NEW: 通知在线模块这是一次“本地玩家的落子”
+     window.dispatchEvent(new CustomEvent('local-move', { detail: { from, to } }));
+
       if (ret.end){ render(); updateStatus(ret.text); return; }
       render(); updateStatus();
       if (ret.aiShouldPlay) maybeTriggerAI();

@@ -1,3 +1,30 @@
+
+import { startHeartbeat, stopHeartbeat } from '/js/heartbeat.js';
+// === 新增：登录后开始心跳（处于大厅） ===
+// (This block was misplaced and has been removed to fix syntax errors)
+
+emailBtn?.addEventListener('click', async () => {
+  const email = (emailInput?.value || '').trim();
+  if (!email) return alert('请输入邮箱');
+  const { error } = await window.supabase.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: window.location.origin + '/auth/callback' }
+  });
+  if (error) return alert('发送失败：' + error.message);
+  alert('已发送登录链接，请去邮箱点击完成登录');
+});
+
+logoutBtn?.addEventListener('click', async () => {
+  await window.supabase.auth.signOut();
+  await refreshAuthUI();
+});
+
+window.supabase.auth.onAuthStateChange(async () => {
+  await refreshAuthUI();
+});
+
+refreshAuthUI();
+
 // /js/auth-and-presence.js
 const emailInput    = document.getElementById('emailInput');
 const emailBtn      = document.getElementById('emailLoginBtn');

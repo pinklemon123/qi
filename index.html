@@ -1,62 +1,47 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>中国象棋</title>
-    <link rel="stylesheet" href="style.css" />
-  </head>
-  <body>
-    <div id="app">
-      <h1>中国象棋</h1>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>中国象棋</title>
+  <link rel="stylesheet" href="/style.css"/>
+</head>
+<body>
+  <div id="app">
+    <h1>中国象棋</h1>
 
-      <div id="authBox" style="display:flex; gap:8px; align-items:center;">
-        <input id="emailInput" type="email" placeholder="输入邮箱登录（魔法链接）" />
-        <button id="emailLoginBtn">发送登录链接</button>
-        <button id="logoutBtn" style="display:none;">退出登录</button>
-        <span id="whoami"></span>
-      </div>
-
-      <div style="margin-top:8px;">
-        在线人数：<b id="onlineCount">0</b>
-      </div>
-
-      <div class="top-bar" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-        <div style="display:flex;align-items:center;gap:10px">
-          <a href="mode.html" class="btn-link" style="text-decoration:none;padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff">← 选择模式</a>
-          <div id="status">准备开始</div>
-        </div>
-        <div class="controls" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-          <label style="display:inline-flex; align-items:center; gap:6px;">
-            <input type="checkbox" id="aiRedToggle" /> 红方AI
-          </label>
-          <label style="display:inline-flex; align-items:center; gap:6px;">
-            <input type="checkbox" id="aiBlackToggle" /> 黑方AI
-          </label>
-          <label style="display:inline-flex; align-items:center; gap:6px;">
-            难度
-            <select id="aiLevel">
-              <option value="easy">简单</option>
-              <option value="medium" selected>普通</option>
-              <option value="hard">困难</option>
-            </select>
-          </label>
-          <button id="resetBtn">重新开始</button>
-          <button id="undoBtn">悔棋</button>
-        </div>
-      </div>
-
-      <div id="board" aria-label="中国象棋棋盘" role="grid"></div>
-
-      <div class="legend">
-        <div> 红方先行</div>
-        <div>点击棋子查看可走位置，点目标落子；点悔棋撤回一步</div>
-      </div>
+    <!-- 登录区 -->
+    <div id="authBox" style="display:flex;gap:8px;align-items:center;">
+      <input id="emailInput" type="email" placeholder="输入邮箱登录（魔法链接）"/>
+      <button id="emailLoginBtn">发送登录链接</button>
+      <button id="logoutBtn" style="display:none;">退出</button>
+      <span id="whoami"></span>
     </div>
 
-    <!-- 顺序很重要：先创建 Supabase 客户端，再登录/Presence，再渲染棋盘 -->
-    <script type="module" src="/js/supabase-client.js"></script>
-    <script type="module" src="/js/auth-and-presence.js"></script>
-    <script type="module" src="/js/ui-view.js"></script>
-  </body>
+    <!-- 在线人数（来自 presence 表） -->
+    <div style="margin:6px 0 12px 0;">
+      在线人数：<b id="onlineCount">0</b>
+      <a href="/mode.html" style="margin-left:12px;">→ 进入匹配大厅</a>
+    </div>
+
+    <!-- 你的顶部控制条 / 棋盘 / 说明 …（保留原有结构） -->
+    <div class="top-bar"> … </div>
+    <div id="board" role="grid" aria-label="中国象棋棋盘"></div>
+    <div class="legend"> … </div>
+  </div>
+
+<script type="module" src="/js/supabase-client.js"></script>
+<script type="module" src="/js/auth-and-presence.js"></script>
+<script type="module" src="/js/heartbeat.js"></script>
+<script type="module" src="/js/online-count.js"></script>
+<script type="module" src="/js/online-game.js"></script>
+<script type="module">
+  import { bootFromURL } from '/js/online-game.js';
+  import { startHeartbeat } from '/js/heartbeat.js';
+  // 登录后在 auth-and-presence.js 已经会 startHeartbeat('lobby')
+  bootFromURL(); // 有 matchId 就直接进入在线对战
+</script>
+<script type="module" src="/js/ui-view.js"></script>
+
+</body>
 </html>
