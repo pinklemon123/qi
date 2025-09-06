@@ -51,44 +51,47 @@ window.supabase.auth.onAuthStateChange(async () => {
 async function ensurePresence(user) {
   if (lobbyChannel) return;
 
-  // 1) 取得 session，并把 token 交给 Realtime
+  // 再保险：把 access_token 交给 Realtime
   const { data: { session } } = await window.supabase.auth.getSession();
-  if (session?.access_token) {
-    window.supabase.realtime.setAuth(session.access_token);
-  }
+  if (session?.access_token) window.supabase.realtime.setAuth(session.access_token);
 
-  // 2) 建频道
-  lobbyChannel = window.supabase.channel('presence:lobby', {
-    config: { presence: { key: user.id } }   // 以 user.id 作为去重键
+  // 改成 'lobby'，并打开 broadcast（self:true 方便本页自收自发做回环测试）
+  lobbyChannel = window.supabase.channel('lobby', {
+    config: {
+      presence:  { key: user.id },
+      broadcast: { self: true }
+    }
   });
 
-  // 3) 监听 join/leave/sync，方便调试 & 计数
-  lobbyChannel.on('presence', { event: 'join' }, ({ key }) => {
-    // console.log('[join]', key);
+  // 收到 ping 就在控制台打印，便于你确认连通性
+  lobbyChannel.on('broadcast', { event: 'ping' }, (p) => {
+    console.log('[broadcast/ping] recv', p);
   });
-  lobbyChannel.on('presence', { event: 'leave' }, ({ key }) => {
-    // console.log('[leave]', key);
-  });
+
+  // 每次同步统计唯一在线用户
   lobbyChannel.on('presence', { event: 'sync' }, () => {
-    const state = lobbyChannel.presenceState(); // { userId: [metas...] }
-    const uniqueUsers = Object.keys(state).length;                       // 唯一用户数
-    const sessions = Object.values(state).reduce((n, arr) => n + arr.length, 0); // 会话数(多标签页会>1)
-    if (onlineCountEl) onlineCountEl.textContent = String(uniqueUsers);  // 你想显示会话数就改成 sessions
-    // console.log('[sync]', { state, uniqueUsers, sessions });
+    const state = lobbyChannel.presenceState();
+    const uniqueUsers = Object.keys(state).length;
+    if (onlineCountEl) onlineCountEl.textContent = String(uniqueUsers);
+    // console.log('[presence sync]', state);
   });
 
-  // 4) 等到 SUBSCRIBED 再 track（关键）
+  // 等 SUBSCRIBED 再上报 presence（关键）
   await new Promise((resolve) => {
-    lobbyChannel.subscribe((status) => {
-      if (status === 'SUBSCRIBED') resolve();
-    });
+    lobbyChannel.subscribe((status) => status === 'SUBSCRIBED' && resolve());
   });
 
-  await lobbyChannel.track({
-    at: Date.now(),
-    email: (await window.supabase.auth.getUser()).data.user?.email || ''
+  // 上报“我在”
+  await lobbyChannel.track({ at: Date.now() });
+
+  // 发一个可见的广播，Inspector 能看到
+  await lobbyChannel.send({
+    type: 'broadcast',
+    event: 'ping',
+    payload: { from: 'web', t: Date.now() }
   });
 }
+
 
 // --- 替换 teardownPresence ---
 async function teardownPresence() {
