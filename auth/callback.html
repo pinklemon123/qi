@@ -1,0 +1,11 @@
+<!doctype html><meta charset="utf-8" />
+<script type="module">
+  import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+  const supabase = createClient(
+    "https://jmzufmxgcnlxxzcpqlok.supabase.co",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImptenVmbXhnY25seHh6Y3BxbG9rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcxMjM2NjMsImV4cCI6MjA3MjY5OTY2M30.3yKCYZqoq88xV0_558Nx_g9pCbrvZuP9qSMH3R6G14A"
+  );
+  const { error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+  if (error) alert('登录失败：' + error.message);
+  window.location.replace('/');
+</script>

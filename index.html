@@ -9,16 +9,17 @@
   <body>
     <div id="app">
       <h1>中国象棋</h1>
-<div id="authBox" style="display:flex; gap:8px; align-items:center;">
-  <input id="emailInput" type="email" placeholder="输入邮箱登录（魔法链接）" />
-  <button id="emailLoginBtn">发送登录链接</button>
-  <button id="logoutBtn" style="display:none;">退出登录</button>
-  <span id="whoami"></span>
-</div>
 
-<div style="margin-top:8px;">
-  在线人数：<b id="onlineCount">0</b>
-</div>
+      <div id="authBox" style="display:flex; gap:8px; align-items:center;">
+        <input id="emailInput" type="email" placeholder="输入邮箱登录（魔法链接）" />
+        <button id="emailLoginBtn">发送登录链接</button>
+        <button id="logoutBtn" style="display:none;">退出登录</button>
+        <span id="whoami"></span>
+      </div>
+
+      <div style="margin-top:8px;">
+        在线人数：<b id="onlineCount">0</b>
+      </div>
 
       <div class="top-bar" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
         <div style="display:flex;align-items:center;gap:10px">
@@ -53,74 +54,9 @@
       </div>
     </div>
 
-    <script type="module" src="./ui-view.js"></script>
+    <!-- 顺序很重要：先创建 Supabase 客户端，再登录/Presence，再渲染棋盘 -->
+    <script type="module" src="/js/supabase-client.js"></script>
+    <script type="module" src="/js/auth-and-presence.js"></script>
+    <script type="module" src="/js/ui-view.js"></script>
   </body>
 </html>
-<!-- 你可以用 CDN 直接引入 supabase-js（v2） -->
-<script type="module">
-  const emailInput = document.getElementById('emailInput')
-  const emailBtn   = document.getElementById('emailLoginBtn')
-  const logoutBtn  = document.getElementById('logoutBtn')
-  const whoami     = document.getElementById('whoami')
-  const onlineCountEl = document.getElementById('onlineCount')
-
-  let lobbyChannel = null
-
-  async function refreshAuthUI() {
-    const { data: { user } } = await window.supabase.auth.getUser()
-    if (user) {
-      emailInput.style.display = 'none'
-      emailBtn.style.display   = 'none'
-      logoutBtn.style.display  = 'inline-block'
-      whoami.textContent = `已登录：${user.email || user.id.slice(0,8)}`
-      ensurePresence(user)
-    } else {
-      whoami.textContent = ''
-      emailInput.style.display = 'inline-block'
-      emailBtn.style.display   = 'inline-block'
-      logoutBtn.style.display  = 'none'
-      teardownPresence()
-    }
-  }
-
-  emailBtn.onclick = async () => {
-    const email = emailInput.value.trim()
-    if (!email) return alert('请输入邮箱')
-    const { error } = await window.supabase.auth.signInWithOtp({ email })
-    if (error) return alert('发送失败：' + error.message)
-    alert('已发送登录链接，请去邮箱点击完成登录')
-  }
-
-  logoutBtn.onclick = async () => {
-    await window.supabase.auth.signOut()
-    await refreshAuthUI()
-  }
-
-  window.supabase.auth.onAuthStateChange(async () => {
-    await refreshAuthUI()
-  })
-
-  async function ensurePresence(user) {
-    if (lobbyChannel) return
-    lobbyChannel = window.supabase.channel('presence:lobby', {
-      config: { presence: { key: user.id } }
-    })
-    lobbyChannel.on('presence', { event: 'sync' }, () => {
-      const state = lobbyChannel.presenceState()
-      const count = Object.values(state).reduce((n, arr) => n + arr.length, 0)
-      onlineCountEl.textContent = count
-    })
-    await lobbyChannel.subscribe()
-    lobbyChannel.track({ at: Date.now() })
-  }
-
-  async function teardownPresence() {
-    if (lobbyChannel) {
-      await lobbyChannel.unsubscribe()
-      lobbyChannel = null
-      onlineCountEl.textContent = '0'
-    }
-  }
-
-  refreshAuthUI()
-</script>
