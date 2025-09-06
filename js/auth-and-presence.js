@@ -47,45 +47,56 @@ window.supabase.auth.onAuthStateChange(async () => {
   await refreshAuthUI();
 });
 
-// Presence：大厅在线人数（修复：等待 SUBSCRIBED 再 track）
+// --- 替换 ensurePresence ---
 async function ensurePresence(user) {
   if (lobbyChannel) return;
 
-  // 建议频道名简单些
-  lobbyChannel = window.supabase.channel('lobby', {
-    config: { presence: { key: user.id } }
+  // 1) 取得 session，并把 token 交给 Realtime
+  const { data: { session } } = await window.supabase.auth.getSession();
+  if (session?.access_token) {
+    window.supabase.realtime.setAuth(session.access_token);
+  }
+
+  // 2) 建频道
+  lobbyChannel = window.supabase.channel('presence:lobby', {
+    config: { presence: { key: user.id } }   // 以 user.id 作为去重键
   });
 
-  // 每次同步，统计“唯一用户数”
+  // 3) 监听 join/leave/sync，方便调试 & 计数
+  lobbyChannel.on('presence', { event: 'join' }, ({ key }) => {
+    // console.log('[join]', key);
+  });
+  lobbyChannel.on('presence', { event: 'leave' }, ({ key }) => {
+    // console.log('[leave]', key);
+  });
   lobbyChannel.on('presence', { event: 'sync' }, () => {
     const state = lobbyChannel.presenceState(); // { userId: [metas...] }
-    const uniqueUsers = Object.keys(state).length;  // 去重后的在线人数
-    const sessions = Object.values(state).reduce((n, arr) => n + arr.length, 0); // 会话数（多标签页会>1）
-    const text = `${uniqueUsers}`;  // 你要展示唯一用户就用这个
-    if (onlineCountEl) onlineCountEl.textContent = text;
-
-    // 可选：调试
-    // console.log('[presence sync]', { state, uniqueUsers, sessions });
+    const uniqueUsers = Object.keys(state).length;                       // 唯一用户数
+    const sessions = Object.values(state).reduce((n, arr) => n + arr.length, 0); // 会话数(多标签页会>1)
+    if (onlineCountEl) onlineCountEl.textContent = String(uniqueUsers);  // 你想显示会话数就改成 sessions
+    // console.log('[sync]', { state, uniqueUsers, sessions });
   });
 
-  // 关键：等到 SUBSCRIBED 才调用 track
-  lobbyChannel.subscribe(async (status) => {
-    // 可选：console.log('[channel status]', status);
-    if (status === 'SUBSCRIBED') {
-      await lobbyChannel.track({
-        at: Date.now(),
-        email: (await window.supabase.auth.getUser()).data.user?.email || '',
-      });
-    }
+  // 4) 等到 SUBSCRIBED 再 track（关键）
+  await new Promise((resolve) => {
+    lobbyChannel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') resolve();
+    });
+  });
+
+  await lobbyChannel.track({
+    at: Date.now(),
+    email: (await window.supabase.auth.getUser()).data.user?.email || ''
   });
 }
 
+// --- 替换 teardownPresence ---
 async function teardownPresence() {
   if (lobbyChannel) {
     await lobbyChannel.unsubscribe();
     lobbyChannel = null;
-    if (onlineCountEl) onlineCountEl.textContent = '0';
   }
+  if (onlineCountEl) onlineCountEl.textContent = '0';
 }
 
 
