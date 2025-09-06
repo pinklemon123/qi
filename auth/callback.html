@@ -1,11 +1,31 @@
 <!doctype html><meta charset="utf-8" />
 <script type="module">
   import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-  const supabase = createClient(
-    "https://jmzufmxgcnlxxzcpqlok.supabase.co",
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImptenVmbXhnY25seHh6Y3BxbG9rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcxMjM2NjMsImV4cCI6MjA3MjY5OTY2M30.3yKCYZqoq88xV0_558Nx_g9pCbrvZuP9qSMH3R6G14A"
-  );
-  const { error } = await supabase.auth.exchangeCodeForSession(window.location.href);
-  if (error) alert('登录失败：' + error.message);
+
+  const SUPABASE_URL = "你的 Supabase URL";
+  const SUPABASE_ANON_KEY = "你的 anon key";
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { flowType: 'implicit', detectSessionInUrl: true, persistSession: true, autoRefreshToken: true }
+  });
+
+  const url = new URL(window.location.href);
+  const hasCode = !!url.searchParams.get('code');
+
+  let ok = false;
+  if (hasCode) {                      // 兼容 PKCE：有 code 就尝试交换
+    const { error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+    ok = !error;
+  }
+
+  if (!ok) {                          // Implicit：等待 SDK 解析 #access_token
+    let tries = 0;
+    while (tries++ < 30) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) break;
+      await new Promise(r => setTimeout(r, 120));
+    }
+  }
+
   window.location.replace('/');
 </script>
