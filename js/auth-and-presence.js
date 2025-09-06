@@ -47,19 +47,37 @@ window.supabase.auth.onAuthStateChange(async () => {
   await refreshAuthUI();
 });
 
-// Presence：大厅在线人数
+// Presence：大厅在线人数（修复：等待 SUBSCRIBED 再 track）
 async function ensurePresence(user) {
   if (lobbyChannel) return;
-  lobbyChannel = window.supabase.channel('presence:lobby', {
+
+  // 建议频道名简单些
+  lobbyChannel = window.supabase.channel('lobby', {
     config: { presence: { key: user.id } }
   });
+
+  // 每次同步，统计“唯一用户数”
   lobbyChannel.on('presence', { event: 'sync' }, () => {
-    const state = lobbyChannel.presenceState();
-    const count = Object.values(state).reduce((n, arr) => n + arr.length, 0);
-    if (onlineCountEl) onlineCountEl.textContent = String(count);
+    const state = lobbyChannel.presenceState(); // { userId: [metas...] }
+    const uniqueUsers = Object.keys(state).length;  // 去重后的在线人数
+    const sessions = Object.values(state).reduce((n, arr) => n + arr.length, 0); // 会话数（多标签页会>1）
+    const text = `${uniqueUsers}`;  // 你要展示唯一用户就用这个
+    if (onlineCountEl) onlineCountEl.textContent = text;
+
+    // 可选：调试
+    // console.log('[presence sync]', { state, uniqueUsers, sessions });
   });
-  await lobbyChannel.subscribe();
-  lobbyChannel.track({ at: Date.now() });
+
+  // 关键：等到 SUBSCRIBED 才调用 track
+  lobbyChannel.subscribe(async (status) => {
+    // 可选：console.log('[channel status]', status);
+    if (status === 'SUBSCRIBED') {
+      await lobbyChannel.track({
+        at: Date.now(),
+        email: (await window.supabase.auth.getUser()).data.user?.email || '',
+      });
+    }
+  });
 }
 
 async function teardownPresence() {
@@ -69,6 +87,7 @@ async function teardownPresence() {
     if (onlineCountEl) onlineCountEl.textContent = '0';
   }
 }
+
 
 // 启动
 refreshAuthUI();
