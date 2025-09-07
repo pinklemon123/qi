@@ -6,6 +6,7 @@
     "@upstash/redis": "^1.28.4",
     "bcryptjs": "^2.4.3",
     "cookie": "^0.6.0",
-    "nanoid": "^5.0.7"
+    "nanoid": "^5.0.7",
+    "node-fetch": "^3.0.0"
   }
 }
