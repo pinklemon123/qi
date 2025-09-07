@@ -10,6 +10,11 @@ export default async function handler(req, res) {
   if (!user?.id) return res.status(200).json({ user: null });
 
   res.status(200).json({
-    user: { id: user.id, username: user.username, created_at: Number(user.created_at) || null },
+    user: {
+      id: user.id,
+      username: user.username,
+      created_at: Number(user.created_at) || null,
+      last_login_at: Number(user.last_login_at) || null,
+    },
   });
 }

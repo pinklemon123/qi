@@ -20,34 +20,22 @@ async function me() {
   }
 }
 
-function getNextParam() {
-  const sp = new URLSearchParams(location.search);
-  return sp.get("next");
-}
-
-function buildNext(url = location.pathname + location.search) {
-  return encodeURIComponent(url);
-}
-
 async function requireLogin() {
   try {
     const { user } = await me();
     if (!user) {
-      const next = buildNext();
-      location.href = `/login.html?next=${next}`;
+      location.href = "/login.html";
       return new Promise(() => {}); // 中断后续逻辑
     }
     return user;
   } catch {
-    const next = buildNext();       // 任意异常 → 也跳登录
-    location.href = `/login.html?next=${next}`;
+    location.href = "/login.html"; // 任意异常 → 也跳登录
     return new Promise(() => {});
   }
 }
 
 function redirectAfterLogin() {
-  const next = getNextParam();
-  location.href = next || "/";
+  location.href = "/";
 }
 
 async function signup({ username, password }) {
@@ -60,8 +48,7 @@ async function login({ username, password }) {
 
 async function logout() {
   await postJSON("/api/logout", {});
-  const next = buildNext("/"); // 退出后回首页
-  location.href = `/login.html?next=${next}`;
+  location.href = "/login.html";
 }
 
 function mountUserBar(user, { showLobby = true } = {}) {

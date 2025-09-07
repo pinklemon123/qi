@@ -4,7 +4,9 @@ import cookie from "cookie";
 import redis from "./redis.js";
 
 const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || "sid";
-const SESSION_TTL = parseInt(process.env.SESSION_TTL_SECONDS || "1209600", 10); // 14天
+// SESSION_TTL_SECONDS<=0 表示永不过期
+const SESSION_TTL = parseInt(process.env.SESSION_TTL_SECONDS || "0", 10);
+const PERMANENT_MAX_AGE = 60 * 60 * 24 * 365 * 10; // 10年
 
 export function parseCookies(req) {
   return cookie.parse(req.headers.cookie || "");
@@ -19,8 +21,12 @@ export async function createSession(userId, meta = {}) {
     ip: meta.ip || "",
     createdAt: Date.now(),
   };
-  // Upstash set + EX
-  await redis.set(key, JSON.stringify(payload), { ex: SESSION_TTL });
+  // Upstash set + EX（>0）或永久保存
+  if (SESSION_TTL > 0) {
+    await redis.set(key, JSON.stringify(payload), { ex: SESSION_TTL });
+  } else {
+    await redis.set(key, JSON.stringify(payload));
+  }
   return sid;
 }
 
@@ -44,13 +50,14 @@ export async function destroySession(req) {
 
 export function setSessionCookie(res, sid) {
   const isProd = process.env.VERCEL === "1";
-  const header = cookie.serialize(COOKIE_NAME, sid, {
+  const opts = {
     httpOnly: true,
     sameSite: "lax",
     secure: isProd,
     path: "/",
-    maxAge: SESSION_TTL,
-  });
+    maxAge: SESSION_TTL > 0 ? SESSION_TTL : PERMANENT_MAX_AGE,
+  };
+  const header = cookie.serialize(COOKIE_NAME, sid, opts);
   res.setHeader("Set-Cookie", header);
 }
 

@@ -26,6 +26,7 @@ export default async function handler(req, res) {
   const ok = await bcrypt.compare(password, user.password_hash);
   if (!ok) return res.status(401).json({ error: "Invalid credentials" });
 
+  await redis.hset(`user:id:${userId}`, { last_login_at: Date.now().toString() });
   const sid = await createSession(userId, { ua: req.headers["user-agent"] || "", ip });
   setSessionCookie(res, sid);
   res.status(200).json({ userId, username: user.username });
