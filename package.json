@@ -1,15 +1,11 @@
 {
-  "name": "xiangqi-web",
-  "version": "1.0.0",
+  "name": "qi",
   "private": true,
-  "description": "Simple Xiangqi web app with optional DeepSeek AI for black",
-  "main": "server.js",
-  "type": "commonjs",
-  "scripts": {
-    "start": "node server.js"
-  },
+  "type": "module",
   "dependencies": {
-    "express": "^4.19.2",
-    "node-fetch": "^3.3.2"
+    "@upstash/redis": "^1.28.4",
+    "bcryptjs": "^2.4.3",
+    "cookie": "^0.6.0",
+    "nanoid": "^5.0.7"
   }
 }

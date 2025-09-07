@@ -2,46 +2,56 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>中国象棋</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>中国象棋 · qi</title>
   <link rel="stylesheet" href="/style.css"/>
+  <style>
+    /* 可选：主页顶部的操作栏 */
+    .top-actions { display:flex; gap:12px; align-items:center; margin:8px 0; }
+    .pill { padding:8px 12px; border-radius:999px; border:0; cursor:pointer; }
+  </style>
 </head>
 <body>
-  <div id="app">
+  <main id="app" style="max-width:960px;margin:24px auto;padding:16px;">
     <h1>中国象棋</h1>
 
-    <!-- 登录区 -->
-    <div id="authBox" style="display:flex;gap:8px;align-items:center;">
-      <input id="emailInput" type="email" placeholder="输入邮箱登录（魔法链接）"/>
-      <button id="emailLoginBtn">发送登录链接</button>
-      <button id="logoutBtn" style="display:none;">退出</button>
-      <span id="whoami"></span>
+    <!-- 顶部操作条：显示在线人数、进入匹配大厅 -->
+    <div class="top-actions">
+      <span>在线人数：<b id="onlineCount">0</b></span>
+      <button class="pill" id="goLobby">进入匹配大厅</button>
     </div>
 
-    <!-- 在线人数（来自 presence 表） -->
-    <div style="margin:6px 0 12px 0;">
-      在线人数：<b id="onlineCount">0</b>
-      <a href="/mode.html" style="margin-left:12px;">→ 进入匹配大厅</a>
-    </div>
+    <!-- 象棋 UI 会由你现有的脚本渲染（保留你原来的布局/容器结构即可） -->
+    <div id="board-root"></div>
+  </main>
 
-    <!-- 你的顶部控制条 / 棋盘 / 说明 …（保留原有结构） -->
-    <div class="top-bar"> … </div>
-    <div id="board" role="grid" aria-label="中国象棋棋盘"></div>
-    <div class="legend"> … </div>
-  </div>
+  <!-- 登录与跳转（放在 body 末尾即可） -->
+  <script src="/auth.js"></script>
 
-<script type="module" src="/js/supabase-client.js"></script>
-<script type="module" src="/js/auth-and-presence.js"></script>
-<script type="module" src="/js/heartbeat.js"></script>
-<script type="module" src="/js/online-count.js"></script>
-<script type="module" src="/js/online-game.js"></script>
-<script type="module">
-  import { bootFromURL } from '/js/online-game.js';
-  import { startHeartbeat } from '/js/heartbeat.js';
-  // 登录后在 auth-and-presence.js 已经会 startHeartbeat('lobby')
-  bootFromURL(); // 有 matchId 就直接进入在线对战
-</script>
-<script type="module" src="/js/ui-view.js"></script>
+  <!-- 页面逻辑（使用 ES Modules 引入你现有脚本） -->
+  <script type="module">
+    import { startHeartbeat } from '/js/heartbeat.js';
+    import { bootFromURL } from '/js/online-game.js';
+    import '/js/online-count.js';    // 运行后自动更新 #onlineCount
+    import '/js/ui-view.js';         // 你的棋盘/UI 渲染模块
 
+    (async () => {
+      // 1) 强制登录（未登录会跳到 /login.html?next=当前页）
+      const user = await Auth.requireLogin();
+
+      // 2) 右上角用户条（含“匹配大厅”与“退出”）
+      Auth.mountUserBar(user, { showLobby: true });
+
+      // 3) 心跳：让在线人数/匹配感知准确
+      startHeartbeat('lobby');
+
+      // 4) 主页 -> 大厅
+      const btn = document.getElementById('goLobby');
+      if (btn) btn.onclick = () => location.href = '/mode.html';
+
+      // 5) 如果 URL 携带 ?matchId=xxx，直接进入在线对战
+      bootFromURL();
+    })();
+  </script>
 </body>
 </html>

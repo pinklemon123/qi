@@ -2,9 +2,13 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>匹配大厅 - 中国象棋</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>匹配大厅 - 中国象棋 · qi</title>
   <link rel="stylesheet" href="/style.css"/>
+  <style>
+    .row { display:flex; gap:12px; margin:12px 0; }
+    .pill { padding:8px 12px; border-radius:999px; border:0; cursor:pointer; }
+  </style>
 </head>
 <body>
   <main style="max-width:720px;margin:24px auto;padding:16px;">
@@ -12,35 +16,49 @@
 
     <p>在线人数：<b id="onlineCount">0</b></p>
 
-    <div style="display:flex;gap:12px;margin:12px 0;">
-      <button id="btnStartMM">开始匹配</button>
-      <button id="btnStopMM">取消匹配</button>
-      <a href="/" style="margin-left:auto;">← 返回游戏</a>
+    <div class="row">
+      <button class="pill" id="btnStartMM">开始匹配</button>
+      <button class="pill" id="btnStopMM">取消匹配</button>
+      <a class="pill" href="/" style="text-decoration:none;display:inline-block;line-height:30px;background:#eee;">回到首页</a>
     </div>
 
-    <div id="mmStatus">未匹配</div>
+    <p id="mmStatus">尚未开始匹配</p>
   </main>
 
-<script type="module" src="/js/supabase-client.js"></script>
-<script type="module" src="/js/auth-and-presence.js"></script>
-<script type="module" src="/js/heartbeat.js"></script>
-<script type="module" src="/js/online-count.js"></script>
-<script type="module">
-  import { startMatchmaking, stopMatchmaking } from '/js/matchmaking.js';
-  const statusEl = document.getElementById('mmStatus');
-  document.getElementById('btnStartMM').onclick = () => {
-    statusEl.textContent = '匹配中…';
-    startMatchmaking((matchId) => {
-      statusEl.textContent = `匹配成功，房间 ${matchId}`;
-      // 直接带 matchId 回首页开始对战
-      window.location.href = '/?matchId=' + matchId;
-    });
-  };
-  document.getElementById('btnStopMM').onclick = async () => {
-    await stopMatchmaking();
-    statusEl.textContent = '已取消匹配';
-  };
-</script>
+  <!-- 登录与跳转 -->
+  <script src="/auth.js"></script>
 
+  <!-- 大厅逻辑 -->
+  <script type="module">
+    import { startHeartbeat } from '/js/heartbeat.js';
+    import { startMatchmaking, stopMatchmaking } from '/js/online-game.js';
+    import '/js/online-count.js'; // 自动更新 #onlineCount
+
+    (async () => {
+      // 1) 必须登录
+      const user = await Auth.requireLogin();
+
+      // 2) 右上角用户条（在大厅展示“回到首页”按钮）
+      Auth.mountUserBar(user, { showLobby: false });
+
+      // 3) 心跳上线
+      startHeartbeat('lobby');
+
+      // 4) 匹配按钮
+      const statusEl = document.getElementById('mmStatus');
+      document.getElementById('btnStartMM').onclick = async () => {
+        statusEl.textContent = '匹配中…';
+        startMatchmaking((matchId) => {
+          statusEl.textContent = `匹配成功，房间 ${matchId}`;
+          // 匹配成功 -> 回首页并携带 matchId，首页会自动进入对战
+          window.location.href = '/?matchId=' + matchId;
+        });
+      };
+      document.getElementById('btnStopMM').onclick = async () => {
+        await stopMatchmaking();
+        statusEl.textContent = '已取消匹配';
+      };
+    })();
+  </script>
 </body>
 </html>
