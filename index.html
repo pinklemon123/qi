@@ -6,50 +6,85 @@
   <title>中国象棋 · qi</title>
   <link rel="stylesheet" href="/style.css"/>
   <style>
-    /* 可选：主页顶部的操作栏 */
     .top-actions { display:flex; gap:12px; align-items:center; margin:8px 0; }
     .pill { padding:8px 12px; border-radius:999px; border:0; cursor:pointer; }
   </style>
 </head>
 <body>
-  <main id="app" style="max-width:960px;margin:24px auto;padding:16px;">
+  <main id="app" class="app">
     <h1>中国象棋</h1>
 
-    <!-- 顶部操作条：显示在线人数、进入匹配大厅 -->
-    <div class="top-actions">
+    <!-- 模式选择 + 在线人数 -->
+    <div class="top-actions" style="flex-wrap:wrap;">
+      <button class="pill" id="modePve">玩家 vs AI</button>
+      <button class="pill" id="modeAiai">AI vs AI</button>
+      <button class="pill" id="modeOnline">玩家在线对战</button>
       <span>在线人数：<b id="onlineCount">0</b></span>
-      <button class="pill" id="goLobby">进入匹配大厅</button>
     </div>
 
-    <!-- 象棋 UI 会由你现有的脚本渲染（保留你原来的布局/容器结构即可） -->
-    <div id="board-root"></div>
+    <!-- 控制栏 -->
+    <div class="toolbar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <label><input type="checkbox" id="aiRedToggle"/> 红方AI</label>
+      <label><input type="checkbox" id="aiBlackToggle"/> 黑方AI</label>
+      <select id="aiLevel" title="AI难度">
+        <option value="easy">简单</option>
+        <option value="medium" selected>普通</option>
+        <option value="hard">困难</option>
+      </select>
+      <button id="resetBtn" class="pill">重新开始</button>
+      <button id="undoBtn" class="pill">悔棋一步</button>
+    </div>
+
+    <div id="board" aria-label="中国象棋棋盘" role="grid"></div>
+    <div id="status" aria-live="polite">准备就绪</div>
   </main>
 
-  <!-- 登录与跳转（放在 body 末尾即可） -->
+  <!-- 登录与跳转 -->
   <script src="/auth.js"></script>
 
-  <!-- 页面逻辑（使用 ES Modules 引入你现有脚本） -->
   <script type="module">
+    import '/js/supabase-client.js';
     import { startHeartbeat } from '/js/heartbeat.js';
     import { bootFromURL } from '/js/online-game.js';
-    import '/js/online-count.js';    // 运行后自动更新 #onlineCount
-    import '/js/ui-view.js';         // 你的棋盘/UI 渲染模块
+    import '/js/online-count.js';
+    import '/js/ui-view.js';
 
     (async () => {
-      // 1) 强制登录（未登录会跳到 /login.html?next=当前页）
-      const user = await Auth.requireLogin();
+      // 若已登录，显示用户信息并汇报在线心跳
+      const { user } = await Auth.me();
+      if (user) {
+        Auth.mountUserBar(user, { showLobby: true });
+        startHeartbeat('lobby');
+      }
 
-      // 2) 右上角用户条（含“匹配大厅”与“退出”）
-      Auth.mountUserBar(user, { showLobby: true });
+      const aiRedToggle   = document.getElementById('aiRedToggle');
+      const aiBlackToggle = document.getElementById('aiBlackToggle');
 
-      // 3) 心跳：让在线人数/匹配感知准确
-      startHeartbeat('lobby');
+      document.getElementById('modePve').onclick = () => {
+        aiRedToggle.checked = false;
+        aiBlackToggle.checked = true;
+        aiRedToggle.dispatchEvent(new Event('change'));
+        aiBlackToggle.dispatchEvent(new Event('change'));
+      };
 
-      // 4) 主页 -> 大厅
-      const btn = document.getElementById('goLobby');
-      if (btn) btn.onclick = () => location.href = '/mode.html';
+      document.getElementById('modeAiai').onclick = () => {
+        aiRedToggle.checked = true;
+        aiBlackToggle.checked = true;
+        aiRedToggle.dispatchEvent(new Event('change'));
+        aiBlackToggle.dispatchEvent(new Event('change'));
+      };
 
-      // 5) 如果 URL 携带 ?matchId=xxx，直接进入在线对战
+      document.getElementById('modeOnline').onclick = async () => {
+        const { user } = await Auth.me();
+        if (!user) {
+          const next = encodeURIComponent('/mode.html');
+          location.href = `/login.html?next=${next}`;
+          return;
+        }
+        location.href = '/mode.html';
+      };
+
+      // 支持通过 URL 直接进入对战
       bootFromURL();
     })();
   </script>
