@@ -39,6 +39,7 @@ export default async function handler(req, res) {
       username: uname,
       password_hash: pwdHash,
       created_at: Date.now().toString(),
+      last_login_at: Date.now().toString(),
     });
   } catch (e) {
     // 回滚索引
