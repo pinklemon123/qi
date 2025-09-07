@@ -11,8 +11,13 @@ async function postJSON(url, data) {
 }
 
 async function me() {
-  const res = await fetch("/api/me", { credentials: "include" });
-  return res.json();
+  try {
+    const res = await fetch("/api/me", { credentials: "include" });
+    if (!res.ok) return { user: null };         // 服务器报错 → 当未登录
+    return await res.json().catch(() => ({ user: null }));
+  } catch {
+    return { user: null };                      // 网络/解析错误 → 当未登录
+  }
 }
 
 function getNextParam() {
@@ -24,15 +29,20 @@ function buildNext(url = location.pathname + location.search) {
   return encodeURIComponent(url);
 }
 
-function requireLogin() {
-  return me().then(({ user }) => {
+async function requireLogin() {
+  try {
+    const { user } = await me();
     if (!user) {
       const next = buildNext();
       location.href = `/login.html?next=${next}`;
-      return new Promise(() => {}); // 阻断后续执行
+      return new Promise(() => {}); // 中断后续逻辑
     }
     return user;
-  });
+  } catch {
+    const next = buildNext();       // 任意异常 → 也跳登录
+    location.href = `/login.html?next=${next}`;
+    return new Promise(() => {});
+  }
 }
 
 function redirectAfterLogin() {
