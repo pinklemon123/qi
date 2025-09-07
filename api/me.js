@@ -1,6 +1,6 @@
 // api/me.js
-import redis from "./_lib/redis.js";
-import { getSession } from "./_lib/session.js";
+import redis from "./lib/redis.js";
+import { getSession } from "./lib/session.js";
 
 export default async function handler(req, res) {
   const sess = await getSession(req);

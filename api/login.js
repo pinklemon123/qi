@@ -1,8 +1,8 @@
 // api/login.js
 import bcrypt from "bcryptjs";
-import redis from "./_lib/redis.js";
-import { createSession, setSessionCookie } from "./_lib/session.js";
-import { rateLimit } from "./_lib/ratelimit.js";
+import redis from "./lib/redis.js";
+import { createSession, setSessionCookie } from "./lib/session.js";
+import { rateLimit } from "./lib/ratelimit.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
