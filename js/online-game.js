@@ -1,7 +1,7 @@
 // 把匹配得到的 matchId 接到你的棋盘：
 // 1) 监听“本地落子”事件 -> 写入 moves
 // 2) 轮询 moves -> 把对方落子应用到本地棋盘
-import { startMovePolling, pushMove } from '/js/room-sync.js';
+import { startMovePolling, pushMove, stopMovePolling } from '/js/room-sync.js';
 
 // 在 ui-view.js 里，会 dispatch 一个 'local-move' 事件（见下面补丁）
 // 这里接住并推进 DB；同时轮询 DB 应用对方走子。
@@ -21,14 +21,24 @@ export async function startOnlineGame(matchId) {
   // 监听本地落子（由 ui-view.js 触发）
   const onLocal = async (ev) => {
     const { from, to } = ev.detail || {};
-    // 将这一步写入数据库
-    await pushMove({
-      matchId,
-      ply: nextPly++,
-      from: `${from.row},${from.col}`,
-      to:   `${to.row},${to.col}`,
-      userId: user.id
-    });
+    const ply = nextPly++;
+    try {
+      // 将这一步写入数据库
+      await pushMove({
+        matchId,
+        ply,
+        from: `${from.row},${from.col}`,
+        to:   `${to.row},${to.col}`,
+        userId: user.id
+      });
+    } catch (e) {
+      nextPly--; // 失败时回退编号
+      alert('落子保存失败，请重试');
+      // 撤销乐观更新并停止轮询
+      document.getElementById('undoBtn')?.click();
+      window.removeEventListener('local-move', onLocal);
+      stopMovePolling();
+    }
   };
   window.addEventListener('local-move', onLocal);
 
