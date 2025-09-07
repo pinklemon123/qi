@@ -1,4 +1,3 @@
-// public/auth.js
 async function postJSON(url, data) {
   const res = await fetch(url, {
     method: "POST",
@@ -26,12 +25,11 @@ function buildNext(url = location.pathname + location.search) {
 }
 
 function requireLogin() {
-  // 返回 Promise，已登录 resolve(user)，未登录会重定向到 /login.html?next=...
   return me().then(({ user }) => {
     if (!user) {
       const next = buildNext();
       location.href = `/login.html?next=${next}`;
-      return new Promise(() => {}); // 中断后续逻辑
+      return new Promise(() => {}); // 阻断后续执行
     }
     return user;
   });
