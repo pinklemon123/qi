@@ -12,7 +12,9 @@ export default async function handler(req, res) {
   if (!allowed) return res.status(429).json({ error: "Too many attempts, try later." });
 
   let body = {};
-  try { body = JSON.parse(req.body || "{}"); } catch {}
+  try {
+    body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+  } catch {}
   const { username, password } = body;
   if (!username || !password) return res.status(400).json({ error: "Missing username or password" });
 
