@@ -11,6 +11,8 @@ export async function startMatchmaking(onMatched) {
     try {
       const { data, error } = await window.supabase.rpc('try_match_pair');
       if (!error && data?.matched) {
+        __mm = null;                                  // 停止轮询
+        await window.supabase.rpc('leave_queue').catch(() => {});
         const id = data.match_id;
         startHeartbeat('room:' + id, false);          // 进入房间
         if (typeof onMatched === 'function') onMatched(id);
