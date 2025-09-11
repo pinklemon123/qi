@@ -218,15 +218,22 @@ function doAnimatedMove(from, to, done){
   clone.style.transition= 'left 220ms ease, top 220ms ease';
   boardEl.appendChild(clone);
 
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    boardEl.removeChild(clone);
+    animating = false;
+    done();
+  };
+  clone.addEventListener('transitionend', cleanup, { once:true });
+  clone.addEventListener('transitioncancel', cleanup, { once:true });
+  setTimeout(cleanup, 300);
+
   requestAnimationFrame(() => {
     clone.style.left = (b.left - boardRect.left + b.width/2) + 'px';
     clone.style.top  = (b.top  - boardRect.top  + b.height/2) + 'px';
   });
-  clone.addEventListener('transitionend', () => {
-    boardEl.removeChild(clone);
-    animating=false;
-    done();
-  }, { once:true });
 }
 
 // ========== AI 回合 ==========
