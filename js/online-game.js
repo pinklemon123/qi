@@ -6,7 +6,7 @@ import { startMovePolling, pushMove, stopMovePolling } from '/js/room-sync.js';
 // 在 ui-view.js 里，会 dispatch 一个 'local-move' 事件（见下面补丁）
 // 这里接住并推进 DB；同时轮询 DB 应用对方走子。
 export async function startOnlineGame(matchId) {
-  const { data: { user } } = await window.supabase.auth.getUser();
+  const { user } = await Auth.me();
   if (!user) { alert('请先登录'); return; }
 
   // 读当前最大 ply，作为下一步的编号
